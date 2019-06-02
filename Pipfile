@@ -7,8 +7,11 @@ verify_ssl = true
 
 [packages]
 jupyterlab = "*"
+matplotlib = "*"
 pandas-datareader = "*"
 flask-migrate = "*"
+requests = "*"
+python-dotenv = "*"
 
 [requires]
 python_version = "3.7"
