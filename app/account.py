@@ -1,4 +1,5 @@
 from datetime import datetime, date
+from statistics import mean
 
 from sqlalchemy import func
 
@@ -34,9 +35,9 @@ class Portfolio(db.Model):
     stocks_value = db.Column(db.Float, nullable=False)
     coins_value = db.Column(db.Float, nullable=False)
     cash_value = db.Column(db.Float, nullable=False)
-    today_return_pct = db.Column(db.Float, nullable=False)
-    total_return_pct = db.Column(db.Float, nullable=False)
-    last_update = db.Column(db.DateTime, nullable=False)
+    today_return_pct = db.Column(db.Float)
+    total_return_pct = db.Column(db.Float)
+    last_update = db.Column(db.DateTime)
     # relationship
     previous_id = db.Column(db.Integer, db.ForeignKey('portfolio.id'))
     previous = db.relationship('Portfolio', remote_side=[id], backref='next')
@@ -57,16 +58,23 @@ class Portfolio(db.Model):
         inst.stocks_value = float(json['results'][0]['market_value'])
         inst.cash_value = round(float(json['results'][0]['equity']) - inst.stocks_value, 2)
         json = rh.get('https://nummus.robinhood.com/portfolios/').json()
-        inst.coins_value = float(json['results'][0]['extended_hours_market_value'])
+        inst.coins_value = float(json['results'][0]['extended_hours_market_value'] or
+                                 json['results'][0]['market_value'])
         inst.equity = round(inst.stocks_value + inst.coins_value + inst.cash_value, 2)
-        if inst.equity > 0:
-            prev_equity, prev_cost = (inst.previous.equity, inst.previous.cost) if inst.previous else (0, 0)
-            inst.today_return_pct = round(inst.equity / (prev_equity + inst.cost - prev_cost) * 100 - 100, 2)
-            inst.total_return_pct = round(inst.equity / inst.cost * 100 - 100, 2)
-        else:
-            inst.today_return_pct, inst.total_return_pct = 0, 0
+        prev_equity, prev_cost = (inst.previous.equity, inst.previous.cost) if inst.previous else (0, 0)
+        today_cost = prev_equity + inst.cost - prev_cost
+        inst.today_return_pct = round((inst.equity - today_cost) /
+                                      (today_cost if inst.equity > 0 else prev_equity) * 100, 2)
+        inst.total_return_pct = round((inst.equity - inst.cost) / mean(inst.cost_timeline()) * 100, 2)
         inst.last_update = datetime.utcnow()
         return inst
+
+    def cost_timeline(self):
+        cur = self
+        while cur:
+            if cur.equity > 0:
+                yield cur.cost
+            cur = cur.previous
 
 
 class Order(db.Model):
@@ -111,9 +119,9 @@ class Position(db.Model):
     quantity = db.Column(db.Float, nullable=False)
     avg_buy_price = db.Column(db.Float, nullable=False)
     current_price = db.Column(db.Float, nullable=False)
-    today_return_pct = db.Column(db.Float, nullable=False)
-    total_return_pct = db.Column(db.Float, nullable=False)
-    last_update = db.Column(db.DateTime, nullable=False)
+    today_return_pct = db.Column(db.Float)
+    total_return_pct = db.Column(db.Float)
+    last_update = db.Column(db.DateTime)
     # relationship
     previous_id = db.Column(db.Integer, db.ForeignKey('position.id'))
     previous = db.relationship('Position', remote_side=[id], backref='next')
@@ -139,14 +147,20 @@ class Position(db.Model):
         inst.avg_buy_price = round(inst.cost / inst.quantity, 2) if inst.quantity > 0 else 0
         inst.current_price = instrument.price
         inst.equity = round(inst.current_price * inst.quantity, 2)
-        if inst.equity > 0:
-            prev_equity, prev_cost = (inst.previous.equity, inst.previous.cost) if inst.previous else (0, 0)
-            inst.today_return_pct = round(inst.equity / (prev_equity + inst.cost - prev_cost) * 100 - 100, 2)
-            inst.total_return_pct = round(inst.equity / inst.cost * 100 - 100, 2)
-        else:
-            inst.today_return_pct, inst.total_return_pct = 0, 0
+        prev_equity, prev_cost = (inst.previous.equity, inst.previous.cost) if inst.previous else (0, 0)
+        today_cost = prev_equity + inst.cost - prev_cost
+        inst.today_return_pct = round((inst.equity - today_cost) /
+                                      (today_cost if inst.equity > 0 else prev_equity) * 100, 2)
+        inst.total_return_pct = round((inst.equity - inst.cost) / mean(inst.cost_timeline()) * 100, 2)
         inst.last_update = datetime.utcnow()
         return inst
+
+    def cost_timeline(self):
+        cur = self
+        while cur:
+            if cur.equity > 0:
+                yield cur.cost
+            cur = cur.previous
 
 
 def update_account():
@@ -191,6 +205,7 @@ def update_account():
         logger.info('%s', Position.create_or_update(instrument, previous, portfolio, pos['quantity']))
     if previous_positions:
         for prev in previous_positions.values():
-            logger.info('%s', Position.create_or_update(prev.instrument, prev, portfolio, 0))
+            if prev.quantity > 0:
+                logger.info('%s', Position.create_or_update(prev.instrument, prev, portfolio, 0))
 
     db.session.commit()
