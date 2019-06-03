@@ -1,4 +1,4 @@
-from datetime import datetime
+from datetime import datetime, date
 
 from werkzeug.utils import cached_property
 
@@ -89,10 +89,27 @@ class Instrument(db.Model):
             recommended.extend(s['instrument_id'] for s in json['similar'])
         return inst
 
+    @classmethod
+    def create_or_update_btc(cls):
+        inst = cls.query.get('BTC')
+        if not inst:
+            inst = cls(symbol='BTC')
+            db.session.add(inst)
+        inst.robinhood_id = '3d961844-d360-45fc-989b-f6fca761d511'
+        inst.name = 'Bitcoin'
+        inst.list_date = date(2000, 1, 1)
+        inst.popularity = 999999
+        inst.last_update = datetime.utcnow()
+        return inst
+
     @cached_property
     def price(self):
-        json = db.get_app().robinhood.get(f'https://api.robinhood.com/quotes/{self.symbol}/').json()
-        return float(json['last_extended_hours_trade_price'] or json['last_trade_price'])
+        rh = db.get_app().robinhood
+        if self.symbol != 'BTC':
+            json = rh.get(f'https://api.robinhood.com/quotes/{self.symbol}/').json()
+            return float(json['last_extended_hours_trade_price'] or json['last_trade_price'])
+        json = rh.get(f'https://api.robinhood.com/marketdata/forex/quotes/{self.robinhood_id}/').json()
+        return float(json['mark_price'])
 
 
 class Tag(db.Model):
@@ -104,6 +121,7 @@ class Tag(db.Model):
 def update_instruments(popularity_cutoff=300, always=False):
     import collections
     rh, logger = db.get_app().robinhood, db.get_app().logger
+    Instrument.create_or_update_btc()
     queue, seen, count = collections.deque(), set(), 0
     for url in (
             'https://api.robinhood.com/midlands/tags/tag/100-most-popular/',

@@ -20,7 +20,7 @@ class Transfer(db.Model):
         if not inst:
             inst = cls(id=id)
             db.session.add(inst)
-        inst.created_at = datetime.strptime(created_at, '%Y-%m-%dT%H:%M:%S.%fZ')
+        inst.created_at = datetime.fromisoformat(created_at.replace('Z', '+00:00'))
         assert direction == 'deposit'
         inst.amount = float(amount)
         return inst
@@ -92,7 +92,7 @@ class Order(db.Model):
             inst = cls(id=id)
             inst.instrument = instrument
             db.session.add(inst)
-        inst.executed_at = datetime.strptime(executed_at, '%Y-%m-%dT%H:%M:%S.%fZ')
+        inst.executed_at = datetime.fromisoformat(executed_at.replace('Z', '+00:00'))
         inst.price = float(price)
         inst.quantity = float(quantity)
         inst.fees = float(fees)
@@ -135,7 +135,7 @@ class Position(db.Model):
             db.session.add(inst)
         inst.orders.extend(orders)
         inst.quantity = float(quantity)
-        inst.cost = (inst.previous.cost if inst.previous else 0) + sum(o.amount for o in inst.orders)
+        inst.cost = round((inst.previous.cost if inst.previous else 0) + sum(o.amount for o in inst.orders), 2)
         inst.avg_buy_price = round(inst.cost / inst.quantity, 2) if inst.quantity > 0 else 0
         inst.current_price = instrument.price
         inst.equity = round(inst.current_price * inst.quantity, 2)
@@ -162,6 +162,13 @@ def update_account():
     logger.info('%s', portfolio)
 
     # Orders
+    for order in reversed(rh.get('https://nummus.robinhood.com/orders/').json()['results']):
+        if order['state'] == 'filled':
+            Order.create_or_update(order['id'], Instrument.query.get('BTC'),
+                                   order['executions'][0]['timestamp'],
+                                   order['executions'][0]['effective_price'],
+                                   order['executions'][0]['quantity'],
+                                   0, order['side'])
     for order in reversed(rh.get('https://api.robinhood.com/orders/').json()['results']):
         if order['state'] == 'filled':
             s = order['instrument'][len('https://api.robinhood.com/instruments/'):-1]
@@ -174,6 +181,9 @@ def update_account():
 
     # Positions
     previous_positions = {pos.symbol: pos for pos in portfolio.previous.positions} if portfolio.previous else {}
+    quantity = rh.get('https://nummus.robinhood.com/holdings/').json()['results'][0]['quantity']
+    instrument, previous = Instrument.query.get('BTC'), previous_positions.pop('BTC', None)
+    logger.info('%s', Position.create_or_update(instrument, previous, portfolio, quantity))
     for pos in rh.get('https://api.robinhood.com/positions/?nonzero=true').json()['results']:
         s = pos['instrument'][len('https://api.robinhood.com/instruments/'):-1]
         instrument = Instrument.query.filter_by(robinhood_id=s).first()
@@ -182,4 +192,5 @@ def update_account():
     if previous_positions:
         for prev in previous_positions.values():
             logger.info('%s', Position.create_or_update(prev.instrument, prev, portfolio, 0))
+
     db.session.commit()
