@@ -51,30 +51,16 @@ class Instrument(db.Model):
         inst.name = json['simple_name'] or json['name']
         inst.list_date = datetime.strptime(json['list_date'], '%Y-%m-%d')
         inst.last_update = datetime.utcnow()
-
         if popularity is not None:
             inst.popularity = popularity
         else:
             json = rh.get(f'https://api.robinhood.com/instruments/popularity/?ids={rid}').json()
             inst.popularity = int(json['results'][0]['num_open_positions'])
+        inst.fill_fundamentals(rh.get(f'https://api.robinhood.com/fundamentals/{rid}/').json())
 
-        json = rh.get(f'https://api.robinhood.com/fundamentals/{rid}/').json()
-        inst.description = json['description'] if json['description'] else None
-        inst.sector = json['sector'] if json['sector'] else None
-        inst.industry = json['industry'] if json['industry'] else None
-        inst.market_cap = int(float(json['market_cap'])) if json['market_cap'] else None
-        inst.low_52_weeks = float(json['low_52_weeks']) if json['low_52_weeks'] else None
-        inst.high_52_weeks = float(json['high_52_weeks']) if json['high_52_weeks'] else None
-        inst.average_volume = int(float(json['average_volume'])) if json['average_volume'] else None
-        inst.pe_ratio = float(json['pe_ratio']) if json['pe_ratio'] else None
-        inst.pb_ratio = float(json['pb_ratio']) if json['pb_ratio'] else None
-        inst.dividend_yield = float(json['dividend_yield']) if json['dividend_yield'] else None
-        inst.ceo = json['ceo'] if json['ceo'] else None
-        inst.headquarters_city = json['headquarters_city'] if json['headquarters_city'] else None
-        inst.headquarters_state = json['headquarters_state'] if json['headquarters_state'] else None
-        inst.num_employees = int(json['num_employees']) if json['num_employees'] else None
-        inst.year_founded = int(json['year_founded']) if json['year_founded'] else None
-
+        if recommended is not None:
+            json = rh.get(f'https://dora.robinhood.com/instruments/similar/{rid}/').json()
+            recommended.extend(s['instrument_id'] for s in json['similar'])
         json = rh.get(f'https://api.robinhood.com/midlands/tags/instrument/{rid}/').json()
         for tag in json['tags']:
             name = tag['name']
@@ -82,12 +68,25 @@ class Instrument(db.Model):
                 inst.tags.append(Tag(symbol=symbol, name=name))
             if recommended is not None:
                 recommended.extend(url[len('https://api.robinhood.com/instruments/'):-1]
-                                   for url in tag['instruments'][:20])
-
-        if recommended is not None:
-            json = rh.get(f'https://dora.robinhood.com/instruments/similar/{rid}/').json()
-            recommended.extend(s['instrument_id'] for s in json['similar'])
+                                   for url in tag['instruments'][:10])
         return inst
+
+    def fill_fundamentals(self, json):
+        self.description = json['description'] if json['description'] else None
+        self.sector = json['sector'] if json['sector'] else None
+        self.industry = json['industry'] if json['industry'] else None
+        self.market_cap = int(float(json['market_cap'])) if json['market_cap'] else None
+        self.low_52_weeks = float(json['low_52_weeks']) if json['low_52_weeks'] else None
+        self.high_52_weeks = float(json['high_52_weeks']) if json['high_52_weeks'] else None
+        self.average_volume = int(float(json['average_volume'])) if json['average_volume'] else None
+        self.pe_ratio = float(json['pe_ratio']) if json['pe_ratio'] else None
+        self.pb_ratio = float(json['pb_ratio']) if json['pb_ratio'] else None
+        self.dividend_yield = float(json['dividend_yield']) if json['dividend_yield'] else None
+        self.ceo = json['ceo'] if json['ceo'] else None
+        self.headquarters_city = json['headquarters_city'] if json['headquarters_city'] else None
+        self.headquarters_state = json['headquarters_state'] if json['headquarters_state'] else None
+        self.num_employees = int(json['num_employees']) if json['num_employees'] else None
+        self.year_founded = int(json['year_founded']) if json['year_founded'] else None
 
     @classmethod
     def create_or_update_btc(cls):
@@ -118,7 +117,7 @@ class Tag(db.Model):
     name = db.Column(db.String(40), nullable=False)
 
 
-def update_instruments(popularity_cutoff=300, always=False):
+def update_instruments(popularity_cutoff=300):
     import collections
     rh, logger = db.get_app().robinhood, db.get_app().logger
     Instrument.create_or_update_btc()
@@ -145,16 +144,6 @@ def update_instruments(popularity_cutoff=300, always=False):
         if not chunk:
             continue
         for s, p in chunk.items():
-            try:
-                if always or not Instrument.query.filter_by(robinhood_id=s).first():
-                    logger.info('%d. %s', count + 1, Instrument.create_or_update(s, p, queue))
-                    count += 1
-                else:
-                    json = rh.get(f'https://api.robinhood.com/midlands/tags/instrument/{s}/').json()
-                    queue.extend(url[len('https://api.robinhood.com/instruments/'):-1]
-                                 for tag in json['tags'] for url in tag['instruments'][:20])
-                    json = rh.get(f'https://dora.robinhood.com/instruments/similar/{s}/').json()
-                    queue.extend(s['instrument_id'] for s in json['similar'])
-            except:
-                logger.warn('%s', s, exc_info=1)
+            logger.info('%d. %s', count + 1, Instrument.create_or_update(s, p, queue))
+            count += 1
         db.session.commit()

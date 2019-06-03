@@ -37,8 +37,7 @@ def init_components(app):
 
     app.cli.command()(
         click.option('--popularity_cutoff', default=300)(
-            click.option('--always', is_flag=True)(
-                update_instruments)))
+            update_instruments))
     app.cli.command()(update_account)
 
 
