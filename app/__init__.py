@@ -21,7 +21,7 @@ def init_components(app):
     import click
     import requests
     from .instrument import Instrument, update_instruments
-    from .account import Transfer, Portfolio, update_account
+    from .account import Transfer, Portfolio, Order, Position, update_account
 
     app.robinhood = requests.Session()
     app.robinhood.headers['Authorization'] = os.environ['ROBINHOOD_TOKEN']
@@ -31,6 +31,8 @@ def init_components(app):
         'Instrument': Instrument,
         'Transfer': Transfer,
         'Portfolio': Portfolio,
+        'Order': Order,
+        'Position': Position,
     })
 
     app.cli.command()(

@@ -1,5 +1,7 @@
 from datetime import datetime
 
+from werkzeug.utils import cached_property
+
 from . import db
 
 
@@ -39,9 +41,10 @@ class Instrument(db.Model):
         if not json.get('tradeable') or not json.get('list_date'):
             return None
 
-        inst = cls.query.get(json['symbol'])
+        symbol = json['symbol']
+        inst = cls.query.get(symbol)
         if not inst:
-            inst = cls(symbol=json['symbol'])
+            inst = cls(symbol=symbol)
             db.session.add(inst)
 
         inst.robinhood_id = json['id']
@@ -85,6 +88,11 @@ class Instrument(db.Model):
             json = rh.get(f'https://dora.robinhood.com/instruments/similar/{rid}/').json()
             recommended.extend(s['instrument_id'] for s in json['similar'])
         return inst
+
+    @cached_property
+    def price(self):
+        json = db.get_app().robinhood.get(f'https://api.robinhood.com/quotes/{self.symbol}/').json()
+        return float(json['last_extended_hours_trade_price'] or json['last_trade_price'])
 
 
 class Tag(db.Model):
