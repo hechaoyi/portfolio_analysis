@@ -21,6 +21,7 @@ def init_components(app):
     import click
     import requests
     from .instrument import Instrument, update_instruments
+    from .account import Transfer, Portfolio, update_account
 
     app.robinhood = requests.Session()
     app.robinhood.headers['Authorization'] = os.environ['ROBINHOOD_TOKEN']
@@ -28,12 +29,15 @@ def init_components(app):
         'db': db,
         'rh': app.robinhood,
         'Instrument': Instrument,
+        'Transfer': Transfer,
+        'Portfolio': Portfolio,
     })
 
     app.cli.command()(
         click.option('--popularity_cutoff', default=300)(
             click.option('--always', is_flag=True)(
                 update_instruments)))
+    app.cli.command()(update_account)
 
 
 class Config:

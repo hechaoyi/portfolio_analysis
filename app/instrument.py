@@ -39,10 +39,9 @@ class Instrument(db.Model):
         if not json.get('tradeable') or not json.get('list_date'):
             return None
 
-        symbol = json['symbol']
-        inst = cls.query.get(symbol)
+        inst = cls.query.get(json['symbol'])
         if not inst:
-            inst = cls(symbol=symbol)
+            inst = cls(symbol=json['symbol'])
             db.session.add(inst)
 
         inst.robinhood_id = json['id']
