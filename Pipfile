@@ -9,6 +9,7 @@ verify_ssl = true
 jupyterlab = "*"
 matplotlib = "*"
 pandas-datareader = "*"
+scipy = "*"
 flask-migrate = "*"
 requests = "*"
 python-dotenv = "*"

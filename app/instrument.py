@@ -1,7 +1,5 @@
 from datetime import datetime, date
 
-from werkzeug.utils import cached_property
-
 from . import db
 
 
@@ -38,12 +36,15 @@ class Instrument(db.Model):
     def create_or_update(cls, rid, popularity=None, recommended=None):
         rh = db.get_app().robinhood
         json = rh.get(f'https://api.robinhood.com/instruments/{rid}/').json()
-        if not json.get('tradeable') or not json.get('list_date'):
+        if not json.get('tradeable') or not json['list_date'] or json['state'] == 'unlisted':
             return None
 
         symbol = json['symbol']
         inst = cls.query.get(symbol)
         if not inst:
+            old = cls.query.filter_by(robinhood_id=rid).first()
+            if old:
+                db.session.delete(old)
             inst = cls(symbol=symbol)
             db.session.add(inst)
 
@@ -101,7 +102,7 @@ class Instrument(db.Model):
         inst.last_update = datetime.utcnow()
         return inst
 
-    @cached_property
+    @property
     def price(self):
         rh = db.get_app().robinhood
         if self.symbol != 'BTC':
@@ -109,6 +110,28 @@ class Instrument(db.Model):
             return float(json['last_extended_hours_trade_price'] or json['last_trade_price'])
         json = rh.get(f'https://api.robinhood.com/marketdata/forex/quotes/{self.robinhood_id}/').json()
         return float(json['mark_price'])
+
+    @classmethod
+    def find_bonds(cls):
+        return cls.query.filter(cls.tags.any(name='ETF')).filter(
+            cls.name.contains('bond') | cls.description.contains('fixed')).order_by(cls.popularity.desc()).all()
+
+    @classmethod
+    def find_reits(cls):
+        return cls.query.filter(cls.tags.any(name='ETF')).filter(
+            cls.name.contains('reit') | cls.description.contains('real estate')).order_by(cls.popularity.desc()).all()
+
+    @classmethod
+    def find_etfs(cls, limit):
+        return cls.query.filter(cls.tags.any(name='ETF')).filter(
+            ~(cls.name.contains('bond') | cls.description.contains('fixed'))).filter(
+            ~(cls.name.contains('reit') | cls.description.contains('real estate'))).order_by(
+            cls.popularity.desc()).limit(limit).all()
+
+    @classmethod
+    def find_stocks(cls, limit):
+        return cls.query.filter(~cls.tags.any(name='ETF')).filter(cls.symbol != 'BTC').order_by(
+            cls.popularity.desc()).limit(limit).all()
 
 
 class Tag(db.Model):

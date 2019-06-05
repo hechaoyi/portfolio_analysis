@@ -12,16 +12,17 @@ def create_app():
     db.init_app(app)
     Migrate(app, db)
     init_components(app)
-    app.logger.info('Started')
     return app
 
 
 def init_components(app):
     import os
+    import logging
     import click
     import requests
     from .instrument import Instrument, update_instruments
-    from .account import Transfer, Portfolio, Order, Position, update_account
+    from .account import Portfolio, Position, update_account
+    from .analysis import Quote
 
     app.robinhood = requests.Session()
     app.robinhood.headers['Authorization'] = os.environ['ROBINHOOD_TOKEN']
@@ -29,20 +30,19 @@ def init_components(app):
         'db': db,
         'rh': app.robinhood,
         'Instrument': Instrument,
-        'Transfer': Transfer,
         'Portfolio': Portfolio,
-        'Order': Order,
         'Position': Position,
+        'Quote': Quote,
     })
 
     app.cli.command()(
         click.option('--popularity_cutoff', default=300)(
             update_instruments))
     app.cli.command()(update_account)
+    app.logger.setLevel(logging.INFO)
 
 
 class Config:
-    DEBUG = True
     SQLALCHEMY_DATABASE_URI = 'sqlite:///db/portfolio'
     SQLALCHEMY_TRACK_MODIFICATIONS = False
     SQLALCHEMY_ECHO = False

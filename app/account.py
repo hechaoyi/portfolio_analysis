@@ -43,7 +43,8 @@ class Portfolio(db.Model):
     previous = db.relationship('Portfolio', remote_side=[id], backref='next')
 
     def __str__(self):
-        return f'[{self.date}] {self.equity} {self.today_return_pct}%/{self.total_return_pct}%'
+        return f'[{self.date}] Portfolio | {self.equity} ({self.equity - self.cost_today:+.2})' \
+            f' | {self.today_return_pct}%/{self.total_return_pct}%'
 
     @classmethod
     def create_or_update(cls, cost):
@@ -61,13 +62,17 @@ class Portfolio(db.Model):
         inst.coins_value = float(json['results'][0]['extended_hours_market_value'] or
                                  json['results'][0]['market_value'])
         inst.equity = round(inst.stocks_value + inst.coins_value + inst.cash_value, 2)
-        prev_equity, prev_cost = (inst.previous.equity, inst.previous.cost) if inst.previous else (0, 0)
-        today_cost = prev_equity + inst.cost - prev_cost
-        inst.today_return_pct = round((inst.equity - today_cost) /
-                                      (today_cost if inst.equity > 0 else prev_equity) * 100, 2)
+        inst.today_return_pct = round((inst.equity - inst.cost_today) /
+                                      (inst.cost_today if inst.equity > 0 else
+                                       (inst.previous.equity if inst.previous else 0)) * 100, 2)
         inst.total_return_pct = round((inst.equity - inst.cost) / mean(inst.cost_timeline()) * 100, 2)
         inst.last_update = datetime.utcnow()
         return inst
+
+    @property
+    def cost_today(self):
+        prev_equity, prev_cost = (self.previous.equity, self.previous.cost) if self.previous else (0, 0)
+        return prev_equity + self.cost - prev_cost
 
     def cost_timeline(self):
         cur = self
@@ -129,7 +134,8 @@ class Position(db.Model):
     portfolio = db.relationship('Portfolio', backref='positions')
 
     def __str__(self):
-        return f'[{self.date}] {self.equity} {self.today_return_pct}%/{self.total_return_pct}%'
+        return f'[{self.date}] {self.symbol} | {self.equity} ({self.equity - self.cost_today:+.2})' \
+            f' | {self.today_return_pct}%/{self.total_return_pct}%'
 
     @classmethod
     def create_or_update(cls, instrument, previous, portfolio, quantity):
@@ -147,13 +153,17 @@ class Position(db.Model):
         inst.avg_buy_price = round(inst.cost / inst.quantity, 2) if inst.quantity > 0 else 0
         inst.current_price = instrument.price
         inst.equity = round(inst.current_price * inst.quantity, 2)
-        prev_equity, prev_cost = (inst.previous.equity, inst.previous.cost) if inst.previous else (0, 0)
-        today_cost = prev_equity + inst.cost - prev_cost
-        inst.today_return_pct = round((inst.equity - today_cost) /
-                                      (today_cost if inst.equity > 0 else prev_equity) * 100, 2)
+        inst.today_return_pct = round((inst.equity - inst.cost_today) /
+                                      (inst.cost_today if inst.equity > 0 else
+                                       (inst.previous.equity if inst.previous else 0)) * 100, 2)
         inst.total_return_pct = round((inst.equity - inst.cost) / mean(inst.cost_timeline()) * 100, 2)
         inst.last_update = datetime.utcnow()
         return inst
+
+    @property
+    def cost_today(self):
+        prev_equity, prev_cost = (self.previous.equity, self.previous.cost) if self.previous else (0, 0)
+        return prev_equity + self.cost - prev_cost
 
     def cost_timeline(self):
         cur = self
