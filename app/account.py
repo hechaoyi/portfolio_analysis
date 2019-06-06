@@ -96,7 +96,7 @@ class Order(db.Model):
     position = db.relationship('Position', backref='orders')
 
     def __str__(self):
-        return f'[{self.created_at}] {self.amount}'
+        return f'[{self.executed_at}] {self.amount}'
 
     @classmethod
     def create_or_update(cls, id, instrument, executed_at, price, quantity, fees, side):
@@ -111,6 +111,35 @@ class Order(db.Model):
         inst.fees = float(fees)
         sign = +1 if side == 'buy' else -1
         inst.amount = round(sign * inst.price * inst.quantity + inst.fees, 2)
+        return inst
+
+
+class Dividend(db.Model):
+    id = db.Column(db.String(40), primary_key=True)
+    symbol = db.Column(db.String(8), db.ForeignKey('instrument.symbol'), nullable=False)
+    instrument = db.relationship('Instrument')
+    amount = db.Column(db.Float, nullable=False)
+    executed_at = db.Column(db.DateTime, nullable=False)
+    rate = db.Column(db.Float, nullable=False)
+    quantity = db.Column(db.Float, nullable=False)
+    # relationship
+    position_id = db.Column(db.Integer, db.ForeignKey('position.id'))
+    position = db.relationship('Position', backref='dividends')
+
+    def __str__(self):
+        return f'[{self.executed_at}] {self.amount}'
+
+    @classmethod
+    def create_or_update(cls, id, instrument, amount, executed_at, rate, quantity):
+        inst = cls.query.get(id)
+        if not inst:
+            inst = cls(id=id)
+            inst.instrument = instrument
+            db.session.add(inst)
+        inst.amount = float(amount)
+        inst.executed_at = datetime.fromisoformat(executed_at.replace('Z', '+00:00'))
+        inst.rate = float(rate)
+        inst.quantity = float(quantity)
         return inst
 
 
@@ -140,6 +169,7 @@ class Position(db.Model):
     @classmethod
     def create_or_update(cls, instrument, previous, portfolio, quantity):
         orders = Order.query.filter_by(instrument=instrument, position=None).all()
+        dividends = Dividend.query.filter_by(instrument=instrument, position=None).all()
         today = date.today()
         inst = cls.query.filter_by(instrument=instrument, date=today).first()
         if not inst:
@@ -148,8 +178,11 @@ class Position(db.Model):
             inst = cls(instrument=instrument, date=today, previous=previous, portfolio=portfolio)
             db.session.add(inst)
         inst.orders.extend(orders)
+        inst.dividends.extend(dividends)
         inst.quantity = float(quantity)
-        inst.cost = round((inst.previous.cost if inst.previous else 0) + sum(o.amount for o in inst.orders), 2)
+        inst.cost = round((inst.previous.cost if inst.previous else 0)
+                          + sum(o.amount for o in inst.orders)
+                          - sum(o.amount for o in inst.dividends), 2)
         inst.avg_buy_price = round(inst.cost / inst.quantity, 2) if inst.quantity > 0 else 0
         inst.current_price = instrument.price
         inst.equity = round(inst.current_price * inst.quantity, 2)
@@ -203,16 +236,26 @@ def update_account():
                                    order['executions'][0]['quantity'],
                                    order['fees'], order['side'])
 
+    # Dividends
+    for dividend in reversed(rh.get('https://api.robinhood.com/dividends/').json()['results']):
+        if dividend['state'] == 'paid':
+            s = dividend['instrument'][len('https://api.robinhood.com/instruments/'):-1]
+            instrument = Instrument.query.filter_by(robinhood_id=s).first()
+            Dividend.create_or_update(dividend['id'], instrument,
+                                      dividend['amount'], dividend['paid_at'],
+                                      dividend['rate'], dividend['position'])
+
     # Positions
     previous_positions = {pos.symbol: pos for pos in portfolio.previous.positions} if portfolio.previous else {}
     quantity = rh.get('https://nummus.robinhood.com/holdings/').json()['results'][0]['quantity']
     instrument, previous = Instrument.query.get('BTC'), previous_positions.pop('BTC', None)
     logger.info('%s', Position.create_or_update(instrument, previous, portfolio, quantity))
     for pos in rh.get('https://api.robinhood.com/positions/?nonzero=true').json()['results']:
-        s = pos['instrument'][len('https://api.robinhood.com/instruments/'):-1]
-        instrument = Instrument.query.filter_by(robinhood_id=s).first()
-        previous = previous_positions.pop(instrument.symbol, None)
-        logger.info('%s', Position.create_or_update(instrument, previous, portfolio, pos['quantity']))
+        if float(pos['quantity']) > 0:
+            s = pos['instrument'][len('https://api.robinhood.com/instruments/'):-1]
+            instrument = Instrument.query.filter_by(robinhood_id=s).first()
+            previous = previous_positions.pop(instrument.symbol, None)
+            logger.info('%s', Position.create_or_update(instrument, previous, portfolio, pos['quantity']))
     if previous_positions:
         for prev in previous_positions.values():
             if prev.quantity > 0:

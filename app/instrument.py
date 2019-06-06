@@ -107,7 +107,7 @@ class Instrument(db.Model):
         rh = db.get_app().robinhood
         if self.symbol != 'BTC':
             json = rh.get(f'https://api.robinhood.com/quotes/{self.symbol}/').json()
-            return float(json['last_extended_hours_trade_price'] or json['last_trade_price'])
+            return float(json['last_trade_price'])
         json = rh.get(f'https://api.robinhood.com/marketdata/forex/quotes/{self.robinhood_id}/').json()
         return float(json['mark_price'])
 
@@ -149,7 +149,8 @@ def update_instruments(popularity_cutoff=300):
             'https://api.robinhood.com/midlands/tags/tag/100-most-popular/',
             'https://api.robinhood.com/midlands/tags/tag/etf/',
             'https://api.robinhood.com/midlands/tags/tag/reit/',
-            'https://api.robinhood.com/midlands/tags/tag/china/',):
+            'https://api.robinhood.com/midlands/tags/tag/china/',
+            'https://api.robinhood.com/midlands/tags/tag/3xetf/',):
         queue.extend(url[len('https://api.robinhood.com/instruments/'):-1]
                      for url in rh.get(url).json()['instruments'][:100])
     while queue:

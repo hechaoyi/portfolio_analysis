@@ -89,10 +89,10 @@ class Quote:
         return self.optimize(period, fsolve(attempt, init_guess))
 
     def graph(self, period, portfolio=None):
-        data = {col: self.data[col] * (10000 / self.data[col][self.start]) for col in self.data.columns}
+        data = {col: self.data[col] * (100 / self.data[col][self.start]) for col in self.data.columns}
         if portfolio:
             data['Portfolio'] = sum(data[st] * sh for st, sh in portfolio.items())
-            data['Portfolio'] = data['Portfolio'] * (10000 / data['Portfolio'][self.start])
+            data['Portfolio'] = data['Portfolio'] * (100 / data['Portfolio'][self.start])
         data = DataFrame(data)
         data.plot(figsize=(12, 8), grid=1)
         stat = (data.pct_change(period) * 100).describe().T
