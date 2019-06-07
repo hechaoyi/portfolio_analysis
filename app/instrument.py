@@ -118,19 +118,18 @@ class Instrument(db.Model):
 
     @classmethod
     def find_reits(cls):
-        return cls.query.filter(cls.tags.any(name='ETF')).filter(
-            cls.name.contains('reit') | cls.description.contains('real estate')).order_by(cls.popularity.desc()).all()
+        return cls.query.filter(cls.tags.any(name='REIT') | cls.name.contains('reit')).order_by(
+            cls.popularity.desc()).all()
 
     @classmethod
     def find_etfs(cls, limit):
         return cls.query.filter(cls.tags.any(name='ETF')).filter(
-            ~(cls.name.contains('bond') | cls.description.contains('fixed'))).filter(
-            ~(cls.name.contains('reit') | cls.description.contains('real estate'))).order_by(
+            ~(cls.name.contains('bond') | cls.description.contains('fixed') | cls.name.contains('reit'))).order_by(
             cls.popularity.desc()).limit(limit).all()
 
     @classmethod
     def find_stocks(cls, limit):
-        return cls.query.filter(~cls.tags.any(name='ETF')).filter(cls.symbol != 'BTC').order_by(
+        return cls.query.filter(~cls.tags.any(cls.name.in_(['ETF', 'REIT']))).filter(cls.symbol != 'BTC').order_by(
             cls.popularity.desc()).limit(limit).all()
 
 

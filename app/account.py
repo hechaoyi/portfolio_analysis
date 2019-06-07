@@ -43,7 +43,8 @@ class Portfolio(db.Model):
     previous = db.relationship('Portfolio', remote_side=[id], backref='next')
 
     def __str__(self):
-        return f'[{self.date}] Portfolio | {self.equity} ({self.equity - self.cost_today:+.2})' \
+        return f'[{self.date}] Portfolio' \
+            f' | {self.equity} ({self.equity - self.cost_today:+.2f})' \
             f' | {self.today_return_pct}%/{self.total_return_pct}%'
 
     @classmethod
@@ -82,6 +83,16 @@ class Portfolio(db.Model):
             cur = cur.previous
 
 
+class PositionSetting(db.Model):
+    id = db.Column(db.Integer, primary_key=True)
+    symbol = db.Column(db.String(8), db.ForeignKey('instrument.symbol'), nullable=False)
+    instrument = db.relationship('Instrument')
+    proportion = db.Column(db.Float, nullable=False)
+
+    def __str__(self):
+        return f'{self.symbol} {self.proportion}%'
+
+
 class Order(db.Model):
     id = db.Column(db.String(40), primary_key=True)
     symbol = db.Column(db.String(8), db.ForeignKey('instrument.symbol'), nullable=False)
@@ -96,7 +107,7 @@ class Order(db.Model):
     position = db.relationship('Position', backref='orders')
 
     def __str__(self):
-        return f'[{self.executed_at}] {self.amount}'
+        return f'[{self.executed_at}] {self.symbol} {self.amount}'
 
     @classmethod
     def create_or_update(cls, id, instrument, executed_at, price, quantity, fees, side):
@@ -127,7 +138,7 @@ class Dividend(db.Model):
     position = db.relationship('Position', backref='dividends')
 
     def __str__(self):
-        return f'[{self.executed_at}] {self.amount}'
+        return f'[{self.executed_at}] {self.symbol} {self.amount}'
 
     @classmethod
     def create_or_update(cls, id, instrument, amount, executed_at, rate, quantity):
@@ -163,7 +174,8 @@ class Position(db.Model):
     portfolio = db.relationship('Portfolio', backref='positions')
 
     def __str__(self):
-        return f'[{self.date}] {self.symbol} | {self.equity} ({self.equity - self.cost_today:+.2})' \
+        return f'[{self.date}] {self.symbol} {self.percentage_of_portfolio}%' \
+            f' | {self.equity} ({self.equity - self.cost_today:+.2f})' \
             f' | {self.today_return_pct}%/{self.total_return_pct}%'
 
     @classmethod
@@ -204,6 +216,10 @@ class Position(db.Model):
             if cur.equity > 0:
                 yield cur.cost
             cur = cur.previous
+
+    @property
+    def percentage_of_portfolio(self):
+        return round(self.equity / (self.portfolio.stocks_value + self.portfolio.coins_value) * 100, 2)
 
 
 def update_account():
@@ -262,3 +278,20 @@ def update_account():
                 logger.info('%s', Position.create_or_update(prev.instrument, prev, portfolio, 0))
 
     db.session.commit()
+
+    # Recommendations
+    positions = {pos.symbol: pos for pos in portfolio.positions}
+    for setting in PositionSetting.query.all():
+        pos = positions.pop(setting.symbol, None)
+        if pos is None:
+            continue
+        diff = (portfolio.equity + 1000) * setting.proportion / 100 - pos.equity
+        if setting.symbol != 'BTC':
+            if abs(diff / pos.instrument.price) > .9:
+                logger.info('Recommendation: %s %+d', setting.symbol, round(diff / pos.instrument.price))
+        elif abs(diff) > 9:
+            logger.info('Recommendation: %s %+d', setting.symbol, diff)
+    if positions:
+        for pos in positions.values():
+            if pos.quantity > 0:
+                logger.info('Recommendation: %s %d', pos.symbol, -pos.quantity)
