@@ -58,13 +58,12 @@ class Quote:
         stocks, corr, stat = self.data.columns, self.data.pct_change(period).corr(), self.statistics(period)
         buf = provided if provided else []
         best = [None, float('inf')]
+        dfs(0, None)
         if optional:
             for o in optional:
                 b = buf.pop(o)
                 dfs(0, b)
                 buf.insert(o, b)
-        else:
-            dfs(0, None)
         return best[0]
 
     def optimize(self, period, target):

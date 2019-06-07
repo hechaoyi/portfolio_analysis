@@ -88,6 +88,8 @@ class PositionSetting(db.Model):
     symbol = db.Column(db.String(8), db.ForeignKey('instrument.symbol'), nullable=False)
     instrument = db.relationship('Instrument')
     proportion = db.Column(db.Float, nullable=False)
+    profit_val = db.Column(db.Float)
+    return_pct = db.Column(db.Float)
 
     def __str__(self):
         return f'{self.symbol} {self.proportion}%'
@@ -277,21 +279,22 @@ def update_account():
             if prev.quantity > 0:
                 logger.info('%s', Position.create_or_update(prev.instrument, prev, portfolio, 0))
 
-    db.session.commit()
-
     # Recommendations
     positions = {pos.symbol: pos for pos in portfolio.positions}
     for setting in PositionSetting.query.all():
         pos = positions.pop(setting.symbol, None)
-        if pos is None:
-            continue
-        diff = (portfolio.equity + 1000) * setting.proportion / 100 - pos.equity
+        diff = (portfolio.equity + 1000) * setting.proportion / 100 - (pos.equity if pos else 0)
         if setting.symbol != 'BTC':
-            if abs(diff / pos.instrument.price) > .9:
-                logger.info('Recommendation: %s %+d', setting.symbol, round(diff / pos.instrument.price))
-        elif abs(diff) > 9:
+            if abs(diff / setting.instrument.price) > .9:
+                logger.info('Recommendation: %s %+.1f', setting.symbol, diff / setting.instrument.price)
+        elif abs(diff) > 20:
             logger.info('Recommendation: %s %+d', setting.symbol, diff)
+        if pos:
+            setting.profit_val = round(pos.equity - pos.cost, 2)
+            setting.return_pct = pos.total_return_pct
     if positions:
         for pos in positions.values():
             if pos.quantity > 0:
                 logger.info('Recommendation: %s %d', pos.symbol, -pos.quantity)
+
+    db.session.commit()
