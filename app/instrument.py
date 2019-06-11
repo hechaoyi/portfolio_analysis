@@ -107,7 +107,7 @@ class Instrument(db.Model):
         rh = db.get_app().robinhood
         if self.symbol != 'BTC':
             json = rh.get(f'https://api.robinhood.com/quotes/{self.symbol}/').json()
-            return float(json['last_trade_price'])
+            return float(json['last_extended_hours_trade_price'] or json['last_trade_price'])
         json = rh.get(f'https://api.robinhood.com/marketdata/forex/quotes/{self.robinhood_id}/').json()
         return float(json['mark_price'])
 
@@ -129,7 +129,7 @@ class Instrument(db.Model):
 
     @classmethod
     def find_stocks(cls, limit):
-        return cls.query.filter(~cls.tags.any(cls.name.in_(['ETF', 'REIT']))).filter(cls.symbol != 'BTC').order_by(
+        return cls.query.filter(~cls.tags.any(Tag.name.in_(['ETF', 'REIT']))).filter(cls.symbol != 'BTC').order_by(
             cls.popularity.desc()).limit(limit).all()
 
 

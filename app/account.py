@@ -57,11 +57,13 @@ class Portfolio(db.Model):
             db.session.add(inst)
         inst.cost = cost
         json = rh.get('https://api.robinhood.com/portfolios/').json()
-        inst.stocks_value = float(json['results'][0]['market_value'])
-        inst.cash_value = round(float(json['results'][0]['equity']) - inst.stocks_value, 2)
+        inst.stocks_value = float(json['results'][0]['extended_hours_market_value']
+                                  or json['results'][0]['market_value'])
+        inst.cash_value = round(float(json['results'][0]['extended_hours_equity']
+                                      or json['results'][0]['equity']) - inst.stocks_value, 2)
         json = rh.get('https://nummus.robinhood.com/portfolios/').json()
-        inst.coins_value = float(json['results'][0]['extended_hours_market_value'] or
-                                 json['results'][0]['market_value'])
+        inst.coins_value = float(json['results'][0]['extended_hours_market_value']
+                                 or json['results'][0]['market_value'])
         inst.equity = round(inst.stocks_value + inst.coins_value + inst.cash_value, 2)
         inst.today_return_pct = round((inst.equity - inst.cost_today) /
                                       (inst.cost_today if inst.equity > 0 else

@@ -1,11 +1,12 @@
-import math
 import os
 from datetime import date, timedelta
+from functools import partial
+from math import sqrt
 
 import pandas_datareader.data as web
-from numpy import linalg
+from numpy import array
 from pandas import DataFrame
-from scipy.optimize import fsolve
+from scipy.optimize import fsolve, minimize
 
 RISK_FREE_RATE = float(os.environ['RISK_FREE_RATE'])
 
@@ -40,8 +41,8 @@ class Quote:
     def least_correlated_portfolio(self, period, target, provided=None, *optional, cr=1, dr=1, sr=1):
         def dfs(i, ban):
             if len(buf) == target:
-                c = corr.loc[buf, buf].sum().sum() - target
-                d = stat['drawdown'][buf].sum() / 4
+                c = (corr.loc[buf, buf].sum().sum() - target) / 2
+                d = stat['drawdown'][buf].sum() / 5
                 s = -stat[f'{period}-shrp'][buf].sum()
                 score = c * cr + d * dr + s * sr
                 if score < best[1]:
@@ -67,24 +68,28 @@ class Quote:
         return best[0]
 
     def optimize(self, period, target):
-        data = self.data.pct_change(period) * 100
-        mean, cov, ones = data.mean(), data.cov(), [1] * len(data.columns)
-        cov_inv = DataFrame(linalg.pinv(cov.values), cov.columns, cov.index)
-        A, B, C = cov_inv.dot(ones).dot(mean), cov_inv.dot(mean).dot(mean), cov_inv.dot(ones).dot(ones)
-        weights = (B * cov_inv.dot(ones) - A * cov_inv.dot(mean)) / (B * C - A * A) + (
-                C * cov_inv.dot(mean) - A * cov_inv.dot(ones)) / (B * C - A * A) * target
-        return weights, round(mean.dot(weights), 4), round(math.sqrt(cov.dot(weights).dot(weights)), 4)
+        data, n = self.data.pct_change(period) * 100, len(self.data.columns)
+        mean, cov, w0 = data.mean(), data.cov(), array([1 / n] * n)
+        cons = [{'type': 'eq', 'fun': lambda w: sum(w) - 1},
+                {'type': 'eq', 'fun': lambda w: w.T.dot(mean) - target}]
+        for i in range(n):
+            cons.append({'type': 'ineq', 'fun': partial(lambda j, w: w[j], i)})
+        res = minimize(lambda w: w.T.dot(cov).dot(w), w0, method='SLSQP', constraints=cons)
+        print(res)
+        return (dict(zip(self.data.columns, res.x)),
+                round(res.x.T.dot(mean), 4), round(sqrt(res.x.T.dot(cov).dot(res.x)), 4))
 
     def find_optimal_ratio(self, period, init_guess):
         def attempt(guess):
-            weights = (B * cov_inv.dot(ones) - A * cov_inv.dot(mean)) / (B * C - A * A) + (
-                    C * cov_inv.dot(mean) - A * cov_inv.dot(ones)) / (B * C - A * A) * guess
-            return cov.dot(weights).dot(weights)
+            cons = [{'type': 'eq', 'fun': lambda w: sum(w) - 1},
+                    {'type': 'eq', 'fun': lambda w: w.T.dot(mean) - guess}]
+            for i in range(n):
+                cons.append({'type': 'ineq', 'fun': partial(lambda j, w: w[j], i)})
+            x = minimize(lambda w: w.T.dot(cov).dot(w), w0, method='SLSQP', constraints=cons).x
+            return x.T.dot(cov).dot(x)
 
-        data = self.data.pct_change(period) * 100
-        mean, cov, ones = data.mean(), data.cov(), [1] * len(data.columns)
-        cov_inv = DataFrame(linalg.pinv(cov.values), cov.columns, cov.index)
-        A, B, C = cov_inv.dot(ones).dot(mean), cov_inv.dot(mean).dot(mean), cov_inv.dot(ones).dot(ones)
+        data, n = self.data.pct_change(period) * 100, len(self.data.columns)
+        mean, cov, w0 = data.mean(), data.cov(), array([1 / n] * n)
         return self.optimize(period, fsolve(attempt, init_guess))
 
     def graph(self, period, portfolio=None):

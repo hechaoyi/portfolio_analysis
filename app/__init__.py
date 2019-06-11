@@ -1,3 +1,4 @@
+import os
 from flask_sqlalchemy import SQLAlchemy
 
 db = SQLAlchemy()
@@ -16,7 +17,6 @@ def create_app():
 
 
 def init_components(app):
-    import os
     import logging
     import click
     import requests
@@ -45,4 +45,4 @@ def init_components(app):
 class Config:
     SQLALCHEMY_DATABASE_URI = 'sqlite:///db/portfolio'
     SQLALCHEMY_TRACK_MODIFICATIONS = False
-    SQLALCHEMY_ECHO = False
+    SQLALCHEMY_ECHO = int(os.environ['SQLALCHEMY_ECHO'])
