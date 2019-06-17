@@ -90,6 +90,7 @@ class PositionSetting(db.Model):
     symbol = db.Column(db.String(8), db.ForeignKey('instrument.symbol'), nullable=False)
     instrument = db.relationship('Instrument')
     proportion = db.Column(db.Float, nullable=False)
+    drawdown = db.Column(db.Float)
     profit_val = db.Column(db.Float)
     return_pct = db.Column(db.Float)
 
