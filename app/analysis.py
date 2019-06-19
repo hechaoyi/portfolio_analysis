@@ -16,6 +16,7 @@ class Quote:
         start = date.today() - timedelta(days=days_ago)
         self.data = web.DataReader(symbols, 'yahoo', start)['Adj Close']
         self.start = self.data.index[0]
+        self.end = self.data.index[-1]
         self.origin_data = None
 
     def setup_mask(self, mask):
