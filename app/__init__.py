@@ -1,4 +1,5 @@
 import os
+
 from flask_sqlalchemy import SQLAlchemy
 
 db = SQLAlchemy()
@@ -39,6 +40,7 @@ def init_components(app):
         click.option('--popularity_cutoff', default=300)(
             update_instruments))
     app.cli.command()(update_account)
+    app.cli.command()(Quote.usd_cny)
     app.logger.setLevel(logging.INFO)
 
 

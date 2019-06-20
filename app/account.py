@@ -306,9 +306,9 @@ def update_account():
         pos = positions.pop(setting.symbol, None)
         diff = (portfolio.equity + 1000) * setting.proportion / 100 - (pos.equity if pos else 0)
         if setting.symbol != 'BTC':
-            if abs(diff / setting.instrument.price) > .8:
+            if abs(diff / setting.instrument.price) > .9:
                 logger.info('Recommendation: %s %+.1f', setting.symbol, diff / setting.instrument.price)
-        elif abs(diff) > 8:
+        elif abs(diff) > 9:
             logger.info('Recommendation: %s %+d', setting.symbol, diff)
         if pos:
             setting.profit_val = round(pos.equity - pos.cost, 2)

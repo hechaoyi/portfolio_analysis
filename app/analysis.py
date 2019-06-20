@@ -15,7 +15,6 @@ class Quote:
     def __init__(self, symbols, days_ago):
         start = date.today() - timedelta(days=days_ago)
         self.data = web.DataReader(symbols, 'tiingo', start)['adjClose'].unstack('symbol')
-        # web.DataReader('USD/CNY', 'av-forex')
         self.start = self.data.index[0]
         self.end = self.data.index[-1]
         self.origin_data = None
@@ -117,3 +116,7 @@ class Quote:
                 result = max_drawdown_so_far / max_price_so_far * 100
             max_price_so_far = max(max_price_so_far, p)
         return result
+
+    @staticmethod
+    def usd_cny():
+        print(web.DataReader('USD/CNY', 'av-forex')['USD/CNY']['Exchange Rate'])
