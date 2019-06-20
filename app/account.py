@@ -84,6 +84,20 @@ class Portfolio(db.Model):
                 yield cur.cost
             cur = cur.previous
 
+    def calculate_3xetf(self):
+        tmf = next((pos for pos in self.positions if pos.symbol == 'TMF'), None)
+        upro = next((pos for pos in self.positions if pos.symbol == 'UPRO'), None)
+        if not tmf or not upro:
+            return None
+        equity, cost_today = tmf.equity + upro.equity, tmf.cost_today + upro.cost_today
+        today_return_pct = (equity - cost_today) / cost_today
+        total_return_pct = (equity - tmf.cost - upro.cost) / (mean(tmf.cost_timeline()) + mean(upro.cost_timeline()))
+        return f'{today_return_pct * 100:+.2f}%/{total_return_pct * 100:+.2f}%'
+        # p = Portfolio.query.get(18)
+        # while p:
+        #     print(p.date, p.calculate_3xetf())
+        #     p = p.previous
+
 
 class PositionSetting(db.Model):
     id = db.Column(db.Integer, primary_key=True)
@@ -224,7 +238,8 @@ class Position(db.Model):
 
     @property
     def percentage_of_portfolio(self):
-        return round(self.equity / (self.portfolio.stocks_value + self.portfolio.coins_value) * 100, 2)
+        # return round(self.equity / (self.portfolio.stocks_value + self.portfolio.coins_value) * 100, 2)
+        return round(self.equity / (self.portfolio.equity + 1000) * 100, 2)
 
 
 def update_account():
@@ -282,15 +297,18 @@ def update_account():
             if prev.quantity > 0:
                 logger.info('%s', Position.create_or_update(prev.instrument, prev, portfolio, 0))
 
+    # 3xETF
+    logger.info('3xETF: %s', portfolio.calculate_3xetf())
+
     # Recommendations
     positions = {pos.symbol: pos for pos in portfolio.positions}
     for setting in PositionSetting.query.all():
         pos = positions.pop(setting.symbol, None)
         diff = (portfolio.equity + 1000) * setting.proportion / 100 - (pos.equity if pos else 0)
         if setting.symbol != 'BTC':
-            if abs(diff / setting.instrument.price) > .9:
+            if abs(diff / setting.instrument.price) > .8:
                 logger.info('Recommendation: %s %+.1f', setting.symbol, diff / setting.instrument.price)
-        elif abs(diff) > 9:
+        elif abs(diff) > 8:
             logger.info('Recommendation: %s %+d', setting.symbol, diff)
         if pos:
             setting.profit_val = round(pos.equity - pos.cost, 2)

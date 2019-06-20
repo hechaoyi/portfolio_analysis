@@ -14,7 +14,8 @@ RISK_FREE_RATE = float(os.environ['RISK_FREE_RATE'])
 class Quote:
     def __init__(self, symbols, days_ago):
         start = date.today() - timedelta(days=days_ago)
-        self.data = web.DataReader(symbols, 'yahoo', start)['Adj Close']
+        self.data = web.DataReader(symbols, 'tiingo', start)['adjClose'].unstack('symbol')
+        # web.DataReader('USD/CNY', 'av-forex')
         self.start = self.data.index[0]
         self.end = self.data.index[-1]
         self.origin_data = None
