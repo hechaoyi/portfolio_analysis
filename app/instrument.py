@@ -107,25 +107,27 @@ class Instrument(db.Model):
         rh = db.get_app().robinhood
         if self.symbol != 'BTC':
             json = rh.get(f'https://api.robinhood.com/quotes/{self.symbol}/').json()
-            return float(json['last_extended_hours_trade_price'] or json['last_trade_price'])
+            # json['last_extended_hours_trade_price']
+            return float(json['last_trade_price'])
         json = rh.get(f'https://api.robinhood.com/marketdata/forex/quotes/{self.robinhood_id}/').json()
         return float(json['mark_price'])
 
     @classmethod
     def find_bonds(cls):
-        return cls.query.filter(cls.tags.any(name='ETF')).filter(
-            cls.name.contains('bond') | cls.description.contains('fixed')).order_by(cls.popularity.desc()).all()
+        return cls.query.filter(cls.tags.any(name='ETF')) \
+            .filter(cls.name.contains('bond') | cls.name.contains('preferred') | cls.symbol.in_(['MINT'])) \
+            .order_by(cls.popularity.desc()).all()
 
     @classmethod
     def find_reits(cls):
-        return cls.query.filter(cls.tags.any(name='REIT') | cls.name.contains('reit')).order_by(
-            cls.popularity.desc()).all()
+        return cls.query.filter(cls.tags.any(name='REIT') | cls.name.contains('reit')) \
+            .order_by(cls.popularity.desc()).all()
 
     @classmethod
     def find_etfs(cls, limit):
-        return cls.query.filter(cls.tags.any(name='ETF')).filter(
-            ~(cls.name.contains('bond') | cls.description.contains('fixed') | cls.name.contains('reit'))).order_by(
-            cls.popularity.desc()).limit(limit).all()
+        return cls.query.filter(cls.tags.any(name='ETF')) \
+            .filter(~(cls.name.contains('bond') | cls.name.contains('preferred') | cls.name.contains('reit'))) \
+            .order_by(cls.popularity.desc()).limit(limit).all()
 
     @classmethod
     def find_stocks(cls, limit):
