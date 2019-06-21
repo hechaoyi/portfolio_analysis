@@ -1,5 +1,7 @@
 from datetime import datetime, date
 
+from werkzeug.utils import cached_property
+
 from . import db
 
 
@@ -102,7 +104,7 @@ class Instrument(db.Model):
         inst.last_update = datetime.utcnow()
         return inst
 
-    @property
+    @cached_property
     def price(self):
         rh = db.get_app().robinhood
         if self.symbol != 'BTC':

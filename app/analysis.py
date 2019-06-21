@@ -9,13 +9,16 @@ from pandas import DataFrame
 from scipy.optimize import fsolve, minimize
 
 RISK_FREE_RATE = float(os.environ['RISK_FREE_RATE'])
+DATA_READER = {
+    'yahoo': lambda symbols, start: web.DataReader(symbols, 'yahoo', start)['Adj Close'],
+    'tiingo': lambda symbols, start: web.DataReader(symbols, 'tiingo', start)['adjClose'].unstack('symbol'),
+}[os.environ['DATA_READER_VENDOR']]
 
 
 class Quote:
     def __init__(self, symbols, days_ago):
         start = date.today() - timedelta(days=days_ago)
-        self.data = web.DataReader(symbols, 'yahoo', start)['Adj Close']
-        # self.data = web.DataReader(symbols, 'tiingo', start)['adjClose'].unstack('symbol')
+        self.data = DATA_READER(symbols, start)
         self.start = self.data.index[0]
         self.end = self.data.index[-1]
         self.origin_data = None
@@ -94,11 +97,14 @@ class Quote:
         mean, cov, w0 = data.mean(), data.cov(), array([1 / n] * n)
         return self.optimize(period, fsolve(attempt, init_guess))
 
-    def graph(self, period, portfolio=None):
+    def graph(self, period, portfolio=None, drop_components=False):
         data = {col: self.data[col] * (100 / self.data[col][self.start]) for col in self.data.columns}
         if portfolio:
             data['Portfolio'] = sum(data[st] * sh for st, sh in portfolio.items())
             data['Portfolio'] = data['Portfolio'] * (100 / data['Portfolio'][self.start])
+            if drop_components:
+                for st in portfolio:
+                    del data[st]
         data = DataFrame(data)
         data.plot(figsize=(12, 8), grid=1)
         stat = (data.pct_change(period) * 100).describe().T
