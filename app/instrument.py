@@ -28,6 +28,8 @@ class Instrument(db.Model):
     headquarters_state = db.Column(db.String(40))
     num_employees = db.Column(db.Integer)
     year_founded = db.Column(db.Integer)
+    boost = db.Column(db.Float)
+    boost_last_update = db.Column(db.DateTime)
     # relationship
     tags = db.relationship('Tag')
 
@@ -114,6 +116,9 @@ class Instrument(db.Model):
         json = rh.get(f'https://api.robinhood.com/marketdata/forex/quotes/{self.robinhood_id}/').json()
         return float(json['mark_price'])
 
+    def is_china(self):
+        return any(t.name == 'China' for t in self.tags)
+
     @classmethod
     def find_bonds(cls):
         return cls.query.filter(cls.tags.any(name='ETF')) \
@@ -129,12 +134,12 @@ class Instrument(db.Model):
     def find_etfs(cls, limit):
         return cls.query.filter(cls.tags.any(name='ETF')) \
             .filter(~(cls.name.contains('bond') | cls.name.contains('preferred') | cls.name.contains('reit'))) \
-            .order_by(cls.popularity.desc()).limit(limit).all()
+            .order_by((cls.popularity * cls.boost).desc()).limit(limit).all()
 
     @classmethod
     def find_stocks(cls, limit):
-        return cls.query.filter(~cls.tags.any(Tag.name.in_(['ETF', 'REIT']))).filter(cls.symbol != 'BTC').order_by(
-            cls.popularity.desc()).limit(limit).all()
+        return cls.query.filter(~cls.tags.any(Tag.name.in_(['ETF', 'REIT']))).filter(cls.symbol != 'BTC') \
+            .order_by((cls.popularity * cls.boost).desc()).limit(limit).all()
 
 
 class Tag(db.Model):

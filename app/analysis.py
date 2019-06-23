@@ -1,5 +1,5 @@
 import os
-from datetime import date, timedelta
+from datetime import date, timedelta, datetime
 from functools import partial
 from math import sqrt
 
@@ -42,6 +42,17 @@ class Quote:
             frame[f'{p}-shrp'] = (r.mean() - RISK_FREE_RATE * p / 252) / r.std()
         frame['drawdown'] = self.data.apply(self._max_drawdown)
         return DataFrame(frame).sort_values(f'{period}-shrp', ascending=False)
+
+    def update_boosts(self, period, instruments):
+        r = self.data.pct_change(periods=period) * 100
+        boosts = 2 ** ((r.mean() - RISK_FREE_RATE * period / 252) / r.std() - .8)
+        for sym, inst in instruments.items():
+            inst.boost = round(boosts[sym], 4)
+            if inst.is_china():
+                inst.boost = round(inst.boost * 1.5, 4)
+            if inst.boost is None:
+                inst.boost = 1
+            inst.boost_last_update = datetime.utcnow()
 
     def least_correlated_portfolio(self, period, target, provided=None, *optional, cr=1, dr=1, sr=1):
         def dfs(i, ban):

@@ -309,7 +309,7 @@ def update_account():
         pos = positions.pop(setting.symbol, None)
         diff = (portfolio.equity + MARGIN_LIMIT) * setting.proportion / 100 - (pos.equity if pos else 0)
         if setting.symbol != 'BTC':
-            if (diff > 20 or diff < -60) and abs(diff / setting.instrument.price) > .6:
+            if (diff > 30 or diff < -90) and abs(diff / setting.instrument.price) > .6:
                 logger.info('Recommendation: %s %+.1f (%.2f/%.2f)', setting.symbol,
                             diff / setting.instrument.price, diff, setting.instrument.price)
         elif diff > 10 or diff < -30:
