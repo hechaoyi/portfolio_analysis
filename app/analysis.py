@@ -56,14 +56,19 @@ class Quote:
 
     def least_correlated_portfolio(self, period, target, provided=None, *optional, cr=1, dr=1, sr=1):
         def dfs(i, ban):
-            if len(buf) == target:
-                c = (corr.loc[buf, buf].sum().sum() - target) / 2
-                d = stat['drawdown'][buf].sum() / 5
-                s = -stat[f'{period}-shrp'][buf].sum()
-                score = c * cr + d * dr + s * sr
+            if buf:
+                coef = .2 * (len(buf) - 2)
+                if len(buf) == 1:
+                    c = 1
+                else:
+                    c = (corr.loc[buf, buf].sum().sum() - len(buf)) / len(buf) / (len(buf) - 1)
+                d = stat['drawdown'][buf].sum() / len(buf) / 5
+                s = stat[f'{period}-shrp'][buf].sum() / len(buf)
+                score = (c - coef) * cr + (d - coef) * dr - (s - coef) * sr
                 if score < best[1]:
                     best[:] = buf[:], score
                     print(buf[:], score, c, d, s)
+            if len(buf) == target:
                 return
             for j in range(i, len(stocks)):
                 if stocks[j] in buf or stocks[j] == ban:
@@ -83,30 +88,30 @@ class Quote:
                 buf.insert(o, b)
         return best[0]
 
-    def optimize(self, period, target):
+    def optimize(self, period, target, minimum={}):
         data, n = self.data.pct_change(period) * 100, len(self.data.columns)
         mean, cov, w0 = data.mean(), data.cov(), array([1 / n] * n)
         cons = [{'type': 'eq', 'fun': lambda w: sum(w) - 1},
                 {'type': 'eq', 'fun': lambda w: w.T.dot(mean) - target}]
         for i in range(n):
-            cons.append({'type': 'ineq', 'fun': partial(lambda j, w: w[j], i)})
-        res = minimize(lambda w: w.T.dot(cov).dot(w), w0, method='SLSQP', constraints=cons)
+            cons.append({'type': 'ineq', 'fun': partial(lambda j, w: w[j] - minimum.get(j, .001), i)})
+        res = minimize(lambda w: w.T.dot(cov).dot(w), w0, constraints=cons)
         print(res)
-        return (dict(zip(self.data.columns, res.x)),
+        return (dict(zip(self.data.columns, (round(x, 2) for x in res.x))),
                 round(res.x.T.dot(mean), 4), round(sqrt(res.x.T.dot(cov).dot(res.x)), 4))
 
-    def find_optimal_ratio(self, period, init_guess):
+    def find_optimal_ratio(self, period, init_guess, minimum={}):
         def attempt(guess):
             cons = [{'type': 'eq', 'fun': lambda w: sum(w) - 1},
                     {'type': 'eq', 'fun': lambda w: w.T.dot(mean) - guess}]
             for i in range(n):
-                cons.append({'type': 'ineq', 'fun': partial(lambda j, w: w[j], i)})
-            x = minimize(lambda w: w.T.dot(cov).dot(w), w0, method='SLSQP', constraints=cons).x
+                cons.append({'type': 'ineq', 'fun': partial(lambda j, w: w[j] - minimum.get(j, .001), i)})
+            x = minimize(lambda w: w.T.dot(cov).dot(w), w0, constraints=cons).x
             return x.T.dot(cov).dot(x)
 
         data, n = self.data.pct_change(period) * 100, len(self.data.columns)
         mean, cov, w0 = data.mean(), data.cov(), array([1 / n] * n)
-        return self.optimize(period, fsolve(attempt, init_guess))
+        return self.optimize(period, fsolve(attempt, init_guess), minimum)
 
     def graph(self, period, portfolio=None, drop_components=False):
         data = {col: self.data[col] * (100 / self.data[col][self.start]) for col in self.data.columns}
