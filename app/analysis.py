@@ -1,12 +1,12 @@
+import math
 import os
 from datetime import date, timedelta, datetime
-from functools import partial
-from math import sqrt
 
+import numpy as np
 import pandas_datareader.data as web
-from numpy import array
 from pandas import DataFrame
-from scipy.optimize import fsolve, minimize
+from scipy import linalg
+from scipy.optimize import fsolve
 
 RISK_FREE_RATE = float(os.environ['RISK_FREE_RATE'])
 DATA_READER = {
@@ -59,7 +59,7 @@ class Quote:
             if buf:
                 coef = .2 * (len(buf) - 2)
                 if len(buf) == 1:
-                    c = 1
+                    c = .6
                 else:
                     c = (corr.loc[buf, buf].sum().sum() - len(buf)) / len(buf) / (len(buf) - 1)
                 d = stat['drawdown'][buf].sum() / len(buf) / 5
@@ -88,30 +88,44 @@ class Quote:
                 buf.insert(o, b)
         return best[0]
 
-    def optimize(self, period, target, minimum={}):
-        data, n = self.data.pct_change(period) * 100, len(self.data.columns)
-        mean, cov, w0 = data.mean(), data.cov(), array([1 / n] * n)
-        cons = [{'type': 'eq', 'fun': lambda w: sum(w) - 1},
-                {'type': 'eq', 'fun': lambda w: w.T.dot(mean) - target}]
-        for i in range(n):
-            cons.append({'type': 'ineq', 'fun': partial(lambda j, w: w[j] - minimum.get(j, .001), i)})
-        res = minimize(lambda w: w.T.dot(cov).dot(w), w0, constraints=cons)
-        print(res)
-        return (dict(zip(self.data.columns, (round(x, 2) for x in res.x))),
-                round(res.x.T.dot(mean), 4), round(sqrt(res.x.T.dot(cov).dot(res.x)), 4))
+    def optimize(self, period, target):  # minimum=defaultdict(float)
+        data = self.data.pct_change(period) * 100
+        mean, cov, ones = data.mean(), data.cov(), np.ones(len(data.columns))
+        cov_inv = DataFrame(linalg.pinv(cov.values), cov.columns, cov.index)
+        A, B, C = ones.T.dot(cov_inv).dot(mean), mean.T.dot(cov_inv).dot(mean), ones.T.dot(cov_inv).dot(ones)
+        weights = (B * ones.T.dot(cov_inv) - A * mean.T.dot(cov_inv)) / (B * C - A * A) + (
+                C * mean.T.dot(cov_inv) - A * ones.T.dot(cov_inv)) / (B * C - A * A) * target
+        return weights, round(weights.T.dot(mean), 4), round(math.sqrt(weights.T.dot(cov).dot(weights)), 4)
+        # data, n = self.data.pct_change(period) * 100, len(self.data.columns)
+        # mean, cov, w0 = data.mean(), data.cov(), array([1 / n] * n)
+        # cons = [{'type': 'eq', 'fun': lambda w: sum(w) - 1},
+        #         {'type': 'eq', 'fun': lambda w: w.T.dot(mean) - target}]
+        # for i in range(n):
+        #     cons.append({'type': 'ineq', 'fun': partial(lambda j, w: w[j] - minimum[j], i)})
+        # res = minimize(lambda w: w.T.dot(cov).dot(w), w0, method='SLSQP', constraints=cons)
+        # print(res)
+        # return (dict(zip(self.data.columns, (round(x, 2) for x in res.x))),
+        #         round(res.x.T.dot(mean), 4), round(sqrt(res.x.T.dot(cov).dot(res.x)), 4))
 
-    def find_optimal_ratio(self, period, init_guess, minimum={}):
+    def find_optimal_ratio(self, period, init_guess):
         def attempt(guess):
-            cons = [{'type': 'eq', 'fun': lambda w: sum(w) - 1},
-                    {'type': 'eq', 'fun': lambda w: w.T.dot(mean) - guess}]
-            for i in range(n):
-                cons.append({'type': 'ineq', 'fun': partial(lambda j, w: w[j] - minimum.get(j, .001), i)})
-            x = minimize(lambda w: w.T.dot(cov).dot(w), w0, constraints=cons).x
-            return x.T.dot(cov).dot(x)
+            weights = (B * ones.T.dot(cov_inv) - A * mean.T.dot(cov_inv)) / (B * C - A * A) + (
+                    C * mean.T.dot(cov_inv) - A * ones.T.dot(cov_inv)) / (B * C - A * A) * guess
+            return weights.T.dot(cov).dot(weights)
+            # cons = [{'type': 'eq', 'fun': lambda w: sum(w) - 1},
+            #         {'type': 'eq', 'fun': lambda w: w.T.dot(mean) - guess}]
+            # for i in range(n):
+            #     cons.append({'type': 'ineq', 'fun': partial(lambda j, w: w[j] - minimum[j], i)})
+            # x = minimize(lambda w: w.T.dot(cov).dot(w), w0, method='SLSQP', constraints=cons).x
+            # return x.T.dot(cov).dot(x)
 
-        data, n = self.data.pct_change(period) * 100, len(self.data.columns)
-        mean, cov, w0 = data.mean(), data.cov(), array([1 / n] * n)
-        return self.optimize(period, fsolve(attempt, init_guess), minimum)
+        data = self.data.pct_change(period) * 100
+        mean, cov, ones = data.mean(), data.cov(), np.ones(len(data.columns))
+        cov_inv = DataFrame(linalg.pinv(cov.values), cov.columns, cov.index)
+        A, B, C = ones.T.dot(cov_inv).dot(mean), mean.T.dot(cov_inv).dot(mean), ones.T.dot(cov_inv).dot(ones)
+        # data, n = self.data.pct_change(period) * 100, len(self.data.columns)
+        # mean, cov, w0 = data.mean(), data.cov(), array([1 / n] * n)
+        return self.optimize(period, fsolve(attempt, init_guess))
 
     def graph(self, period, portfolio=None, drop_components=False):
         data = {col: self.data[col] * (100 / self.data[col][self.start]) for col in self.data.columns}

@@ -49,7 +49,7 @@ class Instrument(db.Model):
             old = cls.query.filter_by(robinhood_id=rid).first()
             if old:
                 db.session.delete(old)
-            inst = cls(symbol=symbol)
+            inst = cls(symbol=symbol, boost=1)
             db.session.add(inst)
 
         inst.robinhood_id = json['id']

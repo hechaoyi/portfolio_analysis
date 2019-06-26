@@ -269,10 +269,13 @@ def update_account():
         if order['state'] == 'filled':
             s = order['instrument'][len('https://api.robinhood.com/instruments/'):-1]
             instrument = Instrument.query.filter_by(robinhood_id=s).first()
+            amount, quantity = 0, 0
+            for exe in order['executions']:
+                amount += float(exe['price']) * float(exe['quantity'])
+                quantity += float(exe['quantity'])
             Order.create_or_update(order['id'], instrument,
-                                   order['executions'][0]['timestamp'],
-                                   order['executions'][0]['price'],
-                                   order['executions'][0]['quantity'],
+                                   order['executions'][-1]['timestamp'],
+                                   round(amount / quantity, 4), quantity,
                                    order['fees'], order['side'])
 
     # Dividends
@@ -309,10 +312,11 @@ def update_account():
         pos = positions.pop(setting.symbol, None)
         diff = (portfolio.equity + MARGIN_LIMIT) * setting.proportion / 100 - (pos.equity if pos else 0)
         if setting.symbol != 'BTC':
-            if (diff > 30 or diff < -90) and abs(diff / setting.instrument.price) > .6:
+            if (diff > 30 or diff < -60) and abs(diff / setting.instrument.price) > .6:
                 logger.info('Recommendation: %s %+.1f (%.2f/%.2f)', setting.symbol,
-                            diff / setting.instrument.price, diff, setting.instrument.price)
-        elif diff > 10 or diff < -30:
+                            diff / setting.instrument.price, diff,
+							round(diff / setting.instrument.price) * setting.instrument.price)
+        elif diff > 10 or diff < -20:
             logger.info('Recommendation: %s %+d', setting.symbol, diff)
         if pos:
             setting.profit_val = round(pos.equity - pos.cost, 2)
