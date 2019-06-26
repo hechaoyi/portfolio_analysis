@@ -88,14 +88,15 @@ class Quote:
                 buf.insert(o, b)
         return best[0]
 
-    def optimize(self, period, target):  # minimum=defaultdict(float)
+    def optimize(self, period, target, total=1):  # minimum=defaultdict(float)
         data = self.data.pct_change(period) * 100
         mean, cov, ones = data.mean(), data.cov(), np.ones(len(data.columns))
         cov_inv = DataFrame(linalg.pinv(cov.values), cov.columns, cov.index)
         A, B, C = ones.T.dot(cov_inv).dot(mean), mean.T.dot(cov_inv).dot(mean), ones.T.dot(cov_inv).dot(ones)
-        weights = (B * ones.T.dot(cov_inv) - A * mean.T.dot(cov_inv)) / (B * C - A * A) + (
+        weights = (B * ones.T.dot(cov_inv) - A * mean.T.dot(cov_inv)) / (B * C - A * A) * total + (
                 C * mean.T.dot(cov_inv) - A * ones.T.dot(cov_inv)) / (B * C - A * A) * target
-        return weights, round(weights.T.dot(mean), 4), round(math.sqrt(weights.T.dot(cov).dot(weights)), 4)
+        return ({k: round(v, 2) for k, v in weights.items()},
+                round(weights.T.dot(mean), 4), round(math.sqrt(weights.T.dot(cov).dot(weights)), 4))
         # data, n = self.data.pct_change(period) * 100, len(self.data.columns)
         # mean, cov, w0 = data.mean(), data.cov(), array([1 / n] * n)
         # cons = [{'type': 'eq', 'fun': lambda w: sum(w) - 1},
@@ -107,9 +108,9 @@ class Quote:
         # return (dict(zip(self.data.columns, (round(x, 2) for x in res.x))),
         #         round(res.x.T.dot(mean), 4), round(sqrt(res.x.T.dot(cov).dot(res.x)), 4))
 
-    def find_optimal_ratio(self, period, init_guess):
+    def find_optimal_ratio(self, period, init_guess, total=1):
         def attempt(guess):
-            weights = (B * ones.T.dot(cov_inv) - A * mean.T.dot(cov_inv)) / (B * C - A * A) + (
+            weights = (B * ones.T.dot(cov_inv) - A * mean.T.dot(cov_inv)) / (B * C - A * A) * total + (
                     C * mean.T.dot(cov_inv) - A * ones.T.dot(cov_inv)) / (B * C - A * A) * guess
             return weights.T.dot(cov).dot(weights)
             # cons = [{'type': 'eq', 'fun': lambda w: sum(w) - 1},
@@ -125,7 +126,7 @@ class Quote:
         A, B, C = ones.T.dot(cov_inv).dot(mean), mean.T.dot(cov_inv).dot(mean), ones.T.dot(cov_inv).dot(ones)
         # data, n = self.data.pct_change(period) * 100, len(self.data.columns)
         # mean, cov, w0 = data.mean(), data.cov(), array([1 / n] * n)
-        return self.optimize(period, fsolve(attempt, init_guess))
+        return self.optimize(period, fsolve(attempt, init_guess), total)
 
     def graph(self, period, portfolio=None, drop_components=False):
         data = {col: self.data[col] * (100 / self.data[col][self.start]) for col in self.data.columns}

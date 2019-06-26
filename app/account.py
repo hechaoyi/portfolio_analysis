@@ -60,10 +60,10 @@ class Portfolio(db.Model):
             db.session.add(inst)
         inst.cost = cost
         json = rh.get('https://api.robinhood.com/portfolios/').json()
-        # json['results'][0]['extended_hours_market_value']
         inst.stocks_value = float(json['results'][0]['market_value'])
-        # json['results'][0]['extended_hours_equity']
-        inst.cash_value = round(float(json['results'][0]['equity']) - inst.stocks_value, 2)
+        equity = float(json['results'][0]['extended_hours_equity'] or json['results'][0]['equity'])
+        market_value = float(json['results'][0]['extended_hours_market_value'] or json['results'][0]['market_value'])
+        inst.cash_value = round(equity - market_value, 2)
         json = rh.get('https://nummus.robinhood.com/portfolios/').json()
         inst.coins_value = float(json['results'][0]['extended_hours_market_value']
                                  or json['results'][0]['market_value'])
@@ -312,11 +312,10 @@ def update_account():
         pos = positions.pop(setting.symbol, None)
         diff = (portfolio.equity + MARGIN_LIMIT) * setting.proportion / 100 - (pos.equity if pos else 0)
         if setting.symbol != 'BTC':
-            if (diff > 30 or diff < -60) and abs(diff / setting.instrument.price) > .6:
+            if abs(diff) > 50 and abs(diff / setting.instrument.price) > .9:
                 logger.info('Recommendation: %s %+.1f (%.2f/%.2f)', setting.symbol,
-                            diff / setting.instrument.price, diff,
-							round(diff / setting.instrument.price) * setting.instrument.price)
-        elif diff > 10 or diff < -20:
+                            diff / setting.instrument.price, diff, setting.instrument.price)
+        elif abs(diff) > 10:
             logger.info('Recommendation: %s %+d', setting.symbol, diff)
         if pos:
             setting.profit_val = round(pos.equity - pos.cost, 2)
