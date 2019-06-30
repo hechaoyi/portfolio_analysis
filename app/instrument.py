@@ -161,6 +161,7 @@ def update_instruments(popularity_cutoff=300):
             'https://api.robinhood.com/midlands/tags/tag/3xetf/',):
         queue.extend(url[len('https://api.robinhood.com/instruments/'):-1]
                      for url in rh.get(url).json()['instruments'][:100])
+    queue.append('5d0ab83c-ed6b-48be-a7bf-9c707498fb7d')  # EDV
     while queue:
         chunk = []
         while queue and len(chunk) < 50:

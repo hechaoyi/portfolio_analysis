@@ -87,19 +87,16 @@ class Portfolio(db.Model):
                 yield cur.cost
             cur = cur.previous
 
-    def calculate_3xetf(self):
-        tmf = next((pos for pos in self.positions if pos.symbol == 'TMF'), None)
-        upro = next((pos for pos in self.positions if pos.symbol == 'UPRO'), None)
-        if not tmf or not upro:
+    def calculate_etf(self, bond, stock):
+        bond = next((pos for pos in self.positions if pos.symbol == bond), None)
+        stock = next((pos for pos in self.positions if pos.symbol == stock), None)
+        if not bond or not stock:
             return None
-        equity, cost_today = tmf.equity + upro.equity, tmf.cost_today + upro.cost_today
+        equity, cost_today = bond.equity + stock.equity, bond.cost_today + stock.cost_today
         today_return_pct = (equity - cost_today) / cost_today
-        total_return_pct = (equity - tmf.cost - upro.cost) / (mean(tmf.cost_timeline()) + mean(upro.cost_timeline()))
+        total_return_pct = (equity - bond.cost - stock.cost) / (
+                mean(bond.cost_timeline()) + mean(stock.cost_timeline()))
         return f'{today_return_pct * 100:+.2f}%/{total_return_pct * 100:+.2f}%'
-        # p = Portfolio.query.get(18)
-        # while p:
-        #     print(p.date, p.calculate_3xetf())
-        #     p = p.previous
 
 
 class PositionSetting(db.Model):
@@ -303,8 +300,9 @@ def update_account():
             if prev.quantity > 0:
                 logger.info('%s', Position.create_or_update(prev.instrument, prev, portfolio, 0))
 
-    # 3xETF
-    logger.info('3xETF: %s', portfolio.calculate_3xetf())
+    # ETF
+    logger.info('3xETF: %s', portfolio.calculate_etf('TMF', 'UPRO'))
+    logger.info('1xETF: %s', portfolio.calculate_etf('EDV', 'VUG'))
 
     # Recommendations
     positions = {pos.symbol: pos for pos in portfolio.positions}
