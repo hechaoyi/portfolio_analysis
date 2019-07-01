@@ -302,7 +302,8 @@ def update_account():
 
     # ETF
     logger.info('3xETF: %s', portfolio.calculate_etf('TMF', 'UPRO'))
-    logger.info('1xETF: %s', portfolio.calculate_etf('EDV', 'VUG'))
+    logger.info('2xETF: %s', portfolio.calculate_etf('EDV', 'VUG'))
+    logger.info('1xETF: %s', portfolio.calculate_etf('VGLT', 'VOO'))
 
     # Recommendations
     positions = {pos.symbol: pos for pos in portfolio.positions}

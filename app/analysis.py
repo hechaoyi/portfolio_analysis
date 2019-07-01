@@ -6,7 +6,7 @@ import numpy as np
 import pandas_datareader.data as web
 from pandas import DataFrame
 from scipy import linalg
-from scipy.optimize import fsolve
+from scipy.optimize import minimize_scalar
 
 RISK_FREE_RATE = float(os.environ['RISK_FREE_RATE'])
 DATA_READER = {
@@ -59,7 +59,7 @@ class Quote:
             if buf:
                 coef = .2 * (len(buf) - 2)
                 if len(buf) == 1:
-                    c = .6
+                    c = .8
                 else:
                     c = (corr.loc[buf, buf].sum().sum() - len(buf)) / len(buf) / (len(buf) - 1)
                 d = stat['drawdown'][buf].sum() / len(buf) / 5
@@ -88,45 +88,29 @@ class Quote:
                 buf.insert(o, b)
         return best[0]
 
-    def optimize(self, period, target, total=1):  # minimum=defaultdict(float)
+    def optimize(self, period, target, total=1):
         data = self.data.pct_change(period) * 100
         mean, cov, ones = data.mean(), data.cov(), np.ones(len(data.columns))
         cov_inv = DataFrame(linalg.pinv(cov.values), cov.columns, cov.index)
         A, B, C = ones.T.dot(cov_inv).dot(mean), mean.T.dot(cov_inv).dot(mean), ones.T.dot(cov_inv).dot(ones)
         weights = (B * ones.T.dot(cov_inv) - A * mean.T.dot(cov_inv)) / (B * C - A * A) * total + (
                 C * mean.T.dot(cov_inv) - A * ones.T.dot(cov_inv)) / (B * C - A * A) * target
-        return ({k: round(v, 2) for k, v in weights.items()},
-                round(weights.T.dot(mean), 4), round(math.sqrt(weights.T.dot(cov).dot(weights)), 4))
-        # data, n = self.data.pct_change(period) * 100, len(self.data.columns)
-        # mean, cov, w0 = data.mean(), data.cov(), array([1 / n] * n)
-        # cons = [{'type': 'eq', 'fun': lambda w: sum(w) - 1},
-        #         {'type': 'eq', 'fun': lambda w: w.T.dot(mean) - target}]
-        # for i in range(n):
-        #     cons.append({'type': 'ineq', 'fun': partial(lambda j, w: w[j] - minimum[j], i)})
-        # res = minimize(lambda w: w.T.dot(cov).dot(w), w0, method='SLSQP', constraints=cons)
-        # print(res)
-        # return (dict(zip(self.data.columns, (round(x, 2) for x in res.x))),
-        #         round(res.x.T.dot(mean), 4), round(sqrt(res.x.T.dot(cov).dot(res.x)), 4))
+        m, s = weights.T.dot(mean), math.sqrt(weights.T.dot(cov).dot(weights))
+        r = (m - RISK_FREE_RATE * period / 252) / s
+        return {k: round(v, 2) for k, v in weights.items()}, round(m, 4), round(s, 4), round(r, 4)
 
-    def find_optimal_ratio(self, period, init_guess, total=1):
+    def find_optimal_ratio(self, period, total=1):
         def attempt(guess):
             weights = (B * ones.T.dot(cov_inv) - A * mean.T.dot(cov_inv)) / (B * C - A * A) * total + (
                     C * mean.T.dot(cov_inv) - A * ones.T.dot(cov_inv)) / (B * C - A * A) * guess
-            return weights.T.dot(cov).dot(weights)
-            # cons = [{'type': 'eq', 'fun': lambda w: sum(w) - 1},
-            #         {'type': 'eq', 'fun': lambda w: w.T.dot(mean) - guess}]
-            # for i in range(n):
-            #     cons.append({'type': 'ineq', 'fun': partial(lambda j, w: w[j] - minimum[j], i)})
-            # x = minimize(lambda w: w.T.dot(cov).dot(w), w0, method='SLSQP', constraints=cons).x
-            # return x.T.dot(cov).dot(x)
+            m, s = weights.T.dot(mean), math.sqrt(weights.T.dot(cov).dot(weights))
+            return (RISK_FREE_RATE * period / 252 - m) / s
 
         data = self.data.pct_change(period) * 100
         mean, cov, ones = data.mean(), data.cov(), np.ones(len(data.columns))
         cov_inv = DataFrame(linalg.pinv(cov.values), cov.columns, cov.index)
         A, B, C = ones.T.dot(cov_inv).dot(mean), mean.T.dot(cov_inv).dot(mean), ones.T.dot(cov_inv).dot(ones)
-        # data, n = self.data.pct_change(period) * 100, len(self.data.columns)
-        # mean, cov, w0 = data.mean(), data.cov(), array([1 / n] * n)
-        return self.optimize(period, fsolve(attempt, init_guess), total)
+        return self.optimize(period, minimize_scalar(attempt, bounds=(min(mean), max(mean))).x, total)
 
     def graph(self, period, portfolio=None, drop_components=False):
         data = {col: self.data[col] * (100 / self.data[col][self.start]) for col in self.data.columns}
