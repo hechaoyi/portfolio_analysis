@@ -16,9 +16,10 @@ DATA_READER = {
 
 
 class Quote:
-    def __init__(self, symbols, days_ago):
+    def __init__(self, symbols, days_ago, period):
         start = date.today() - timedelta(days=days_ago)
         self.data = DATA_READER(symbols, start)
+        self.period = period
         self.start = self.data.index[0]
         self.end = self.data.index[-1]
         self.origin_data = None
@@ -32,20 +33,16 @@ class Quote:
         if self.origin_data is not None:
             self.data, self.origin_data = self.origin_data, None
 
-    def statistics(self, period, *periods):
-        frame = {}
-        for p in (period,) + periods:
-            r = self.data.pct_change(periods=p) * 100
-            frame[f'{p}-len'] = r.count()
-            frame[f'{p}-mean'] = r.mean()
-            frame[f'{p}-std'] = r.std()
-            frame[f'{p}-shrp'] = (r.mean() - RISK_FREE_RATE * p / 252) / r.std()
-        frame['drawdown'] = self.data.apply(self._max_drawdown)
-        return DataFrame(frame).sort_values(f'{period}-shrp', ascending=False)
+    def statistics(self):
+        data = self.data.pct_change(periods=self.period) * 100
+        frame = {'len': data.count(), 'mean': data.mean(), 'std': data.std(),
+                 'shrp': (data.mean() - RISK_FREE_RATE * self.period / 252) / data.std(),
+                 'drawdown': self.data.apply(self._max_drawdown)}
+        return DataFrame(frame).sort_values('shrp', ascending=False)
 
-    def update_boosts(self, period, instruments):
-        r = self.data.pct_change(periods=period) * 100
-        boosts = 2 ** ((r.mean() - RISK_FREE_RATE * period / 252) / r.std() - .8)
+    def update_boosts(self, instruments):
+        r = self.data.pct_change(periods=self.period) * 100
+        boosts = 2 ** ((r.mean() - RISK_FREE_RATE * self.period / 252) / r.std() - .8)
         for sym, inst in instruments.items():
             inst.boost = round(boosts[sym], 4)
             if inst.is_china():
@@ -54,16 +51,16 @@ class Quote:
                 inst.boost = 1
             inst.boost_last_update = datetime.utcnow()
 
-    def least_correlated_portfolio(self, period, target, provided=None, *optional, cr=1, dr=1, sr=1):
+    def least_correlated_portfolio(self, target, provided=None, *optional, cr=1, dr=1, sr=1):
         def dfs(i, ban):
             if buf:
-                coef = .2 * (len(buf) - 2)
+                coef = .1 * (len(buf) - 1)
                 if len(buf) == 1:
                     c = .8
                 else:
                     c = (corr.loc[buf, buf].sum().sum() - len(buf)) / len(buf) / (len(buf) - 1)
                 d = stat['drawdown'][buf].sum() / len(buf) / 5
-                s = stat[f'{period}-shrp'][buf].sum() / len(buf)
+                s = stat['shrp'][buf].sum() / len(buf)
                 score = (c - coef) * cr + (d - coef) * dr - (s - coef) * sr
                 if score < best[1]:
                     best[:] = buf[:], score
@@ -77,7 +74,7 @@ class Quote:
                 dfs(j + 1, ban)
                 buf.pop()
 
-        stocks, corr, stat = self.data.columns, self.data.pct_change(period).corr(), self.statistics(period)
+        stocks, corr, stat = self.data.columns, self.data.pct_change(self.period).corr(), self.statistics()
         buf = provided if provided else []
         best = [None, float('inf')]
         dfs(0, None)
@@ -88,31 +85,31 @@ class Quote:
                 buf.insert(o, b)
         return best[0]
 
-    def optimize(self, period, target, total=1):
-        data = self.data.pct_change(period) * 100
+    def optimize(self, target, total=1):
+        data = self.data.pct_change(self.period) * 100
         mean, cov, ones = data.mean(), data.cov(), np.ones(len(data.columns))
         cov_inv = DataFrame(linalg.pinv(cov.values), cov.columns, cov.index)
         A, B, C = ones.T.dot(cov_inv).dot(mean), mean.T.dot(cov_inv).dot(mean), ones.T.dot(cov_inv).dot(ones)
         weights = (B * ones.T.dot(cov_inv) - A * mean.T.dot(cov_inv)) / (B * C - A * A) * total + (
                 C * mean.T.dot(cov_inv) - A * ones.T.dot(cov_inv)) / (B * C - A * A) * target
         m, s = weights.T.dot(mean), math.sqrt(weights.T.dot(cov).dot(weights))
-        r = (m - RISK_FREE_RATE * period / 252) / s
+        r = (m - RISK_FREE_RATE * self.period / 252) / s
         return {k: round(v, 2) for k, v in weights.items()}, round(m, 4), round(s, 4), round(r, 4)
 
-    def find_optimal_ratio(self, period, total=1):
+    def find_optimal_ratio(self, total=1, lmd=0):
         def attempt(guess):
             weights = (B * ones.T.dot(cov_inv) - A * mean.T.dot(cov_inv)) / (B * C - A * A) * total + (
                     C * mean.T.dot(cov_inv) - A * ones.T.dot(cov_inv)) / (B * C - A * A) * guess
             m, s = weights.T.dot(mean), math.sqrt(weights.T.dot(cov).dot(weights))
-            return (RISK_FREE_RATE * period / 252 - m) / s
+            return (RISK_FREE_RATE * self.period / 252 - m) / s + lmd * s
 
-        data = self.data.pct_change(period) * 100
+        data = self.data.pct_change(self.period) * 100
         mean, cov, ones = data.mean(), data.cov(), np.ones(len(data.columns))
         cov_inv = DataFrame(linalg.pinv(cov.values), cov.columns, cov.index)
         A, B, C = ones.T.dot(cov_inv).dot(mean), mean.T.dot(cov_inv).dot(mean), ones.T.dot(cov_inv).dot(ones)
-        return self.optimize(period, minimize_scalar(attempt, bounds=(min(mean), max(mean))).x, total)
+        return self.optimize(minimize_scalar(attempt, bounds=(min(mean), max(mean))).x, total)
 
-    def graph(self, period, portfolio=None, drop_components=False):
+    def graph(self, portfolio=None, drop_components=False):
         data = {col: self.data[col] * (100 / self.data[col][self.start]) for col in self.data.columns}
         if portfolio:
             data['Portfolio'] = sum(data[st] * sh for st, sh in portfolio.items())
@@ -122,8 +119,8 @@ class Quote:
                     del data[st]
         data = DataFrame(data)
         data.plot(figsize=(12, 8), grid=1)
-        stat = (data.pct_change(period) * 100).describe().T
-        stat['shrp'] = (stat['mean'] - RISK_FREE_RATE * period / 252) / stat['std']
+        stat = (data.pct_change(self.period) * 100).describe().T
+        stat['shrp'] = (stat['mean'] - RISK_FREE_RATE * self.period / 252) / stat['std']
         stat['drawdown'] = data.apply(self._max_drawdown)
         return stat.sort_values('shrp', ascending=False)
 

@@ -301,9 +301,9 @@ def update_account():
                 logger.info('%s', Position.create_or_update(prev.instrument, prev, portfolio, 0))
 
     # ETF
-    logger.info('3xETF: %s', portfolio.calculate_etf('TMF', 'UPRO'))
-    logger.info('2xETF: %s', portfolio.calculate_etf('EDV', 'VUG'))
-    logger.info('1xETF: %s', portfolio.calculate_etf('VGLT', 'VOO'))
+    # logger.info('3.0x ETF: %s', portfolio.calculate_etf('TMF', 'SPXL'))
+    logger.info('1.2x ETF: %s', portfolio.calculate_etf('EDV', 'QQQ'))
+    # logger.info('1.0x ETF: %s', portfolio.calculate_etf('TLT', 'VOO'))
 
     # Recommendations
     positions = {pos.symbol: pos for pos in portfolio.positions}
