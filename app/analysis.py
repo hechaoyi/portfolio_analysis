@@ -109,6 +109,27 @@ class Quote:
         A, B, C = ones.T.dot(cov_inv).dot(mean), mean.T.dot(cov_inv).dot(mean), ones.T.dot(cov_inv).dot(ones)
         return self.optimize(minimize_scalar(attempt, bounds=(min(mean), max(mean))).x, total)
 
+    def optimize_portfolio(self, candidates, min_percent=.01, min_count=0, total=1):
+        candidates, portfolio = set(candidates), {}
+        corr = self.data.pct_change(self.period).corr()
+        while len(candidates) > 1:
+            self.setup_mask(candidates)
+            ratio, *_ = self.find_optimal_ratio(total - len(portfolio) * min_percent)
+            min_stock = min(ratio, key=lambda s: ratio[s])
+            if ratio[min_stock] > min_percent:
+                portfolio.update(ratio)
+                return portfolio
+            candidates.remove(min_stock)
+            portfolio[min_stock] = min_percent
+            if len(portfolio) > min_count:
+                max_stock = max(portfolio, key=lambda s: corr.loc[s, (portfolio.keys() - {s}) | candidates].max())
+                portfolio.pop(max_stock)
+                c = corr.loc[max_stock, (portfolio.keys() - {max_stock}) | candidates].max()
+                print(f'evicted {max_stock} {c}')
+        if candidates:
+            portfolio[candidates.pop()] = total - len(portfolio) * min_percent
+        return portfolio
+
     def graph(self, portfolio=None, drop_components=False):
         data = {col: self.data[col] * (100 / self.data[col][self.start]) for col in self.data.columns}
         if portfolio:
