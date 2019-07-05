@@ -22,7 +22,8 @@ def init_components(app):
     import click
     import requests
     from .instrument import Instrument, update_instruments
-    from .account import Portfolio, Position, update_account
+    from .account import Portfolio, Position, update_rh_account
+    from .m1 import update_m1_account
     from .analysis import Quote
 
     app.robinhood = requests.Session()
@@ -39,7 +40,8 @@ def init_components(app):
     app.cli.command()(
         click.option('--popularity_cutoff', default=300)(
             update_instruments))
-    app.cli.command()(update_account)
+    app.cli.command()(update_rh_account)
+    app.cli.command()(update_m1_account)
     app.cli.command()(Quote.usd_cny)
     app.logger.setLevel(logging.INFO)
 

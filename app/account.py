@@ -242,7 +242,7 @@ class Position(db.Model):
         return round(self.equity / (self.portfolio.equity + MARGIN_LIMIT) * 100, 2)
 
 
-def update_account():
+def update_rh_account():
     rh, logger = db.get_app().robinhood, db.get_app().logger
 
     # Transfers
