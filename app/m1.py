@@ -42,10 +42,8 @@ class M1Portfolio(db.Model):
                       f'{{ startValue {{ date, value }}, endValue {{ date, value }}, '
                       f'moneyWeightedRateOfReturn, totalGain, capitalGain, earnedDividends, netCashFlow '
                       f'}}}}}}}}', {'Authorization': f'Bearer {token}'})['data']['node']['performance']
-        all = graphql(f'{{ node(id: "{M1_ACCT_ID}") {{ ... on PortfolioSlice {{ performance(period: MAX) '
-                      f'{{ startValue {{ date, value }}, '
-                      f'moneyWeightedRateOfReturn, totalGain, capitalGain, earnedDividends, netCashFlow '
-                      f'}}}}}}}}', {'Authorization': f'Bearer {token}'})['data']['node']['performance']
+        if day['endValue']['date'][-13:] == '00:00:00.000Z':
+            return None
         _date = parse_datetime(day['endValue']['date']).date()
         inst = cls.query.filter_by(date=_date).first()
         if not inst:
@@ -61,6 +59,10 @@ class M1Portfolio(db.Model):
         inst.day_start_time = parse_datetime(day['startValue']['date'])
         inst.day_start_value = day['startValue']['value']
 
+        all = graphql(f'{{ node(id: "{M1_ACCT_ID}") {{ ... on PortfolioSlice {{ performance(period: MAX) '
+                      f'{{ startValue {{ date, value }}, '
+                      f'moneyWeightedRateOfReturn, totalGain, capitalGain, earnedDividends, netCashFlow '
+                      f'}}}}}}}}', {'Authorization': f'Bearer {token}'})['data']['node']['performance']
         inst.all_net_cash_flow = all['netCashFlow']
         inst.all_capital_gain = all['capitalGain']
         inst.all_dividend_gain = all['earnedDividends']

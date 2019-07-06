@@ -109,7 +109,7 @@ class Quote:
         A, B, C = ones.T.dot(cov_inv).dot(mean), mean.T.dot(cov_inv).dot(mean), ones.T.dot(cov_inv).dot(ones)
         return self.optimize(minimize_scalar(attempt, bounds=(min(mean), max(mean))).x, total)
 
-    def optimize_portfolio(self, candidates, min_percent=.01, min_count=0, total=1):
+    def optimize_portfolio(self, candidates, min_percent=.008, min_count=0, total=1):
         candidates, portfolio = set(candidates), {}
         corr = self.data.pct_change(self.period).corr()
         while len(candidates) > 1:
