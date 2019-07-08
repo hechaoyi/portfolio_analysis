@@ -94,7 +94,7 @@ class Quote:
                 C * mean.T.dot(cov_inv) - A * ones.T.dot(cov_inv)) / (B * C - A * A) * target
         m, s = weights.T.dot(mean), math.sqrt(weights.T.dot(cov).dot(weights))
         r = (m - RISK_FREE_RATE * self.period / 252) / s
-        return {k: round(v, 2) for k, v in weights.items()}, round(m, 4), round(s, 4), round(r, 4)
+        return {k: round(v, 3) for k, v in weights.items()}, round(m, 3), round(s, 3), round(r, 3)
 
     def find_optimal_ratio(self, total=1):
         def attempt(guess):
@@ -107,45 +107,54 @@ class Quote:
         mean, cov, ones = data.mean(), data.cov(), np.ones(len(data.columns))
         cov_inv = DataFrame(linalg.pinv(cov.values), cov.columns, cov.index)
         A, B, C = ones.T.dot(cov_inv).dot(mean), mean.T.dot(cov_inv).dot(mean), ones.T.dot(cov_inv).dot(ones)
-        return self.optimize(minimize_scalar(attempt, bounds=(min(mean), max(mean))).x, total)
+        return self.optimize(minimize_scalar(attempt, bracket=(min(mean), max(mean))).x, total)
 
-    def optimize_portfolio(self, min_percent=.008, backlogs_threshold=.95):
+    def optimize_portfolio(self, min_percent=.008, backlogs_threshold=.9):
         candidates, backlogs, evicted = set(self.data.columns), [], {}
         corr = self.data.pct_change(self.period).corr()
         while len(candidates) > 1:
             self.setup_mask(candidates)
             ratio, *_, shrp = self.find_optimal_ratio()
             min_stock = min(ratio, key=lambda s: ratio[s])
-            if ratio[min_stock] > min_percent:
+            if ratio[min_stock] >= min_percent:
                 if evicted:
                     for s in evicted:
-                        if evicted[s][1] > shrp:
+                        if evicted[s] >= shrp:
                             backlogs.append(s)
-                        else:
-                            print(f'evicted {s} {evicted[s][0]}')
+                            print(f'putting back {s} {evicted[s]}/{shrp}')
                 if backlogs:
-                    print(f'retry backlogs {backlogs} at {backlogs_threshold + .01}')
+                    nxt = backlogs_threshold + .005
+                    if backlogs_threshold >= .99 and len(backlogs) >= 10:
+                        nxt = backlogs_threshold + .001
+                    print(f'retry backlogs {backlogs} at {nxt} - {shrp}')
                     self.setup_mask([*backlogs, *candidates])
-                    return self.optimize_portfolio(min_percent, backlogs_threshold + .01)
-                return ratio
+                    r, s = self.optimize_portfolio(min_percent, nxt)
+                    if s > shrp:
+                        return r, s
+                return ratio, shrp
             candidates.remove(min_stock)
             c = corr.loc[min_stock, candidates].max()
-            if c > backlogs_threshold:
+            if c >= backlogs_threshold:
                 backlogs.append(min_stock)
             else:
-                evicted[min_stock] = c, self._calculate_sharpe_ratio(min_stock)
+                evicted[min_stock] = self._calculate_sharpe_ratio(min_stock)
+                print(f'evicted {min_stock} {c}')
         shrp = self._calculate_sharpe_ratio(next(iter(candidates)))
         if evicted:
             for s in evicted:
-                if evicted[s][1] > shrp:
+                if evicted[s] >= shrp:
                     backlogs.append(s)
-                else:
-                    print(f'evicted {s} {evicted[s][0]}')
+                    print(f'putting back {s} {evicted[s]}/{shrp}')
         if backlogs:
-            print(f'retry backlogs {backlogs} at {backlogs_threshold + .01}')
+            nxt = backlogs_threshold + .005
+            if backlogs_threshold >= .99 and len(backlogs) >= 10:
+                nxt = backlogs_threshold + .001
+            print(f'retry backlogs {backlogs} at {nxt} - {shrp}')
             self.setup_mask([*backlogs, *candidates])
-            return self.optimize_portfolio(min_percent, backlogs_threshold + .01)
-        return {candidates.pop(): 1}
+            r, s = self.optimize_portfolio(min_percent, nxt)
+            if s > shrp:
+                return r, s
+        return {candidates.pop(): 1}, shrp
 
     def _calculate_sharpe_ratio(self, stock):
         data = self.data[stock].pct_change(self.period) * 100

@@ -301,21 +301,20 @@ def update_rh_account():
                 logger.info('%s', Position.create_or_update(prev.instrument, prev, portfolio, 0))
 
     # ETF
-    # logger.info('3.0x ETF: %s', portfolio.calculate_etf('TMF', 'SPXL'))
-    logger.info('1.2x ETF: %s', portfolio.calculate_etf('EDV', 'QQQ'))
-    # logger.info('1.0x ETF: %s', portfolio.calculate_etf('TLT', 'VOO'))
+    # logger.info('3x ETF: %s', portfolio.calculate_etf('TMF', 'SPXL'))
+    logger.info('1x ETF: %s', portfolio.calculate_etf('EDV', 'QQQ'))
 
     # Recommendations
     positions = {pos.symbol: pos for pos in portfolio.positions}
     for setting in PositionSetting.query.all():
         pos = positions.pop(setting.symbol, None)
         diff = (portfolio.equity + MARGIN_LIMIT) * setting.proportion / 100 - (pos.equity if pos else 0)
-        if setting.symbol != 'BTC':
-            if abs(diff) > 30 and abs(diff / setting.instrument.price) > .9:
-                logger.info('Recommendation: %s %+.1f (%.2f/%.2f)', setting.symbol,
+        if abs(diff) > 20:
+        	if setting.symbol == 'BTC':
+        		logger.info('Recommendation: %s %+d', setting.symbol, diff)
+        	elif abs(diff / setting.instrument.price) > .9:
+        		logger.info('Recommendation: %s %+.1f (%.2f/%.2f)', setting.symbol,
                             diff / setting.instrument.price, diff, setting.instrument.price)
-        elif abs(diff) > 10:
-            logger.info('Recommendation: %s %+d', setting.symbol, diff)
         if pos:
             setting.profit_val = round(pos.equity - pos.cost, 2)
             setting.return_pct = pos.total_return_pct
