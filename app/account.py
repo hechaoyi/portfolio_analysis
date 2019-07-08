@@ -302,7 +302,7 @@ def update_rh_account():
 
     # ETF
     # logger.info('3x ETF: %s', portfolio.calculate_etf('TMF', 'SPXL'))
-    logger.info('1x ETF: %s', portfolio.calculate_etf('EDV', 'QQQ'))
+    logger.info('1x ETF: %s', portfolio.calculate_etf('EDV', 'MTUM'))
 
     # Recommendations
     positions = {pos.symbol: pos for pos in portfolio.positions}
@@ -321,6 +321,6 @@ def update_rh_account():
     if positions:
         for pos in positions.values():
             if pos.quantity > 0:
-                logger.info('Recommendation: %s %d', pos.symbol, -pos.quantity)
+                logger.info('Recommendation: %s %.4f (%.2f)', pos.symbol, -pos.quantity, -pos.equity)
 
     db.session.commit()
