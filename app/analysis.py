@@ -37,6 +37,7 @@ class Quote:
         data = self.data.pct_change(periods=self.period) * 100
         frame = {'len': data.count(), 'mean': data.mean(), 'std': data.std(),
                  'shrp': (data.mean() - RISK_FREE_RATE * self.period / 252) / data.std(),
+                 'yield': self.data.T[self.data.index[-1]] / self.data.T[self.data.index[0]] * 100 - 100,
                  'drawdown': self.data.apply(self._max_drawdown)}
         return DataFrame(frame).sort_values('shrp', ascending=False)
 
@@ -101,13 +102,16 @@ class Quote:
             weights = (B * ones.T.dot(cov_inv) - A * mean.T.dot(cov_inv)) / (B * C - A * A) * total + (
                     C * mean.T.dot(cov_inv) - A * ones.T.dot(cov_inv)) / (B * C - A * A) * guess
             m, s = weights.T.dot(mean), math.sqrt(weights.T.dot(cov).dot(weights))
-            return (RISK_FREE_RATE * self.period / 252 - m) / s
+            return (s / m) if m > 0 else float('inf')
 
         data = self.data.pct_change(self.period) * 100
         mean, cov, ones = data.mean(), data.cov(), np.ones(len(data.columns))
         cov_inv = DataFrame(linalg.pinv(cov.values), cov.columns, cov.index)
         A, B, C = ones.T.dot(cov_inv).dot(mean), mean.T.dot(cov_inv).dot(mean), ones.T.dot(cov_inv).dot(ones)
-        return self.optimize(minimize_scalar(attempt, bracket=(min(mean), max(mean))).x, total)
+        res = minimize_scalar(attempt, bounds=(mean.min(), mean.max()))
+        if not res.success:
+            print(res)
+        return self.optimize(res.x, total)
 
     def optimize_portfolio(self, min_percent=.008, backlogs_threshold=.9):
         candidates, backlogs, evicted = set(self.data.columns), [], {}
@@ -133,12 +137,12 @@ class Quote:
                         return r, s
                 return ratio, shrp
             candidates.remove(min_stock)
-            c = corr.loc[min_stock, candidates].max()
-            if c >= backlogs_threshold:
+            c1, c2 = corr.loc[min_stock, candidates].max(), corr.loc[min_stock, candidates].min()
+            if c1 >= backlogs_threshold:
                 backlogs.append(min_stock)
             else:
                 evicted[min_stock] = self._calculate_sharpe_ratio(min_stock)
-                print(f'evicted {min_stock} {c}')
+                print(f'evicted {min_stock} {c1:.3f} {c2:.3f}')
         shrp = self._calculate_sharpe_ratio(next(iter(candidates)))
         if evicted:
             for s in evicted:
@@ -172,6 +176,7 @@ class Quote:
         data.plot(figsize=(12, 8), grid=1)
         stat = (data.pct_change(self.period) * 100).describe().T
         stat['shrp'] = (stat['mean'] - RISK_FREE_RATE * self.period / 252) / stat['std']
+        stat['yield'] = data.T[data.index[-1]] / data.T[data.index[0]] * 100 - 100
         stat['drawdown'] = data.apply(self._max_drawdown)
         return stat.sort_values('shrp', ascending=False)
 

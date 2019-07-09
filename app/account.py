@@ -312,7 +312,7 @@ def update_rh_account():
         if abs(diff) > 20:
         	if setting.symbol == 'BTC':
         		logger.info('Recommendation: %s %+d', setting.symbol, diff)
-        	elif abs(diff / setting.instrument.price) > .9:
+        	elif abs(diff / setting.instrument.price) > .7:
         		logger.info('Recommendation: %s %+.1f (%.2f/%.2f)', setting.symbol,
                             diff / setting.instrument.price, diff, setting.instrument.price)
         if pos:
@@ -320,7 +320,7 @@ def update_rh_account():
             setting.return_pct = pos.total_return_pct
     if positions:
         for pos in positions.values():
-            if pos.quantity > 0:
-                logger.info('Recommendation: %s %.4f (%.2f)', pos.symbol, -pos.quantity, -pos.equity)
+            if pos.symbol != 'BTC' and pos.quantity > 0:
+                logger.info('Recommendation: %s %d (%f)', pos.symbol, -pos.quantity, -pos.equity)
 
     db.session.commit()
