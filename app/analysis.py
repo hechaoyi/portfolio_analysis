@@ -135,8 +135,8 @@ class Quote:
                     self.setup_mask([*backlogs, *candidates])
                     sd = self.optimize_portfolio(min_percent, nxt1, nxt2)
                     sd[(shrp, mean)] = ratio
-                    # while len(sd) > 3:
-                    #     sd.popitem(0)
+                    while sd.peekitem(0)[0] < (shrp * .8, mean):
+                        sd.popitem(0)
                     return sd
                 return SortedDict([((shrp, mean), ratio)])
             candidates.remove(min_stock)
@@ -161,8 +161,8 @@ class Quote:
             self.setup_mask([*backlogs, candidate])
             sd = self.optimize_portfolio(min_percent, nxt1, nxt2)
             sd[(shrp, mean)] = {candidate: 1}
-            # while len(sd) > 3:
-            #     sd.popitem(0)
+            while sd.peekitem(0)[0] < (shrp * .8, mean):
+                sd.popitem(0)
             return sd
         return SortedDict([((shrp, mean), {candidate: 1})])
 

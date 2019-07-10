@@ -309,12 +309,9 @@ def update_rh_account():
     for setting in PositionSetting.query.all():
         pos = positions.pop(setting.symbol, None)
         diff = (portfolio.equity + MARGIN_LIMIT) * setting.proportion / 100 - (pos.equity if pos else 0)
-        if abs(diff) > 20:
-        	if setting.symbol == 'BTC':
-        		logger.info('Recommendation: %s %+d', setting.symbol, diff)
-        	elif abs(diff / setting.instrument.price) > .7:
-        		logger.info('Recommendation: %s %+.1f (%.2f/%.2f)', setting.symbol,
-                            diff / setting.instrument.price, diff, setting.instrument.price)
+        if abs(diff) > (portfolio.equity + MARGIN_LIMIT) * .02:
+            logger.info('Recommendation: %s %+.1f (%.2f/%.2f)', setting.symbol,
+                        diff / setting.instrument.price, diff, setting.instrument.price)
         if pos:
             setting.profit_val = round(pos.equity - pos.cost, 2)
             setting.return_pct = pos.total_return_pct
