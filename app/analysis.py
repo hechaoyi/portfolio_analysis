@@ -7,6 +7,7 @@ import pandas_datareader.data as web
 from pandas import DataFrame
 from scipy import linalg
 from scipy.optimize import minimize_scalar
+from sortedcontainers import SortedDict
 
 RISK_FREE_RATE = float(os.environ['RISK_FREE_RATE'])
 DATA_READER = {
@@ -92,7 +93,7 @@ class Quote:
         cov_inv = DataFrame(linalg.pinv(cov.values), cov.columns, cov.index)
         A, B, C = ones.T.dot(cov_inv).dot(mean), mean.T.dot(cov_inv).dot(mean), ones.T.dot(cov_inv).dot(ones)
         weights = (B * ones.T.dot(cov_inv) - A * mean.T.dot(cov_inv)) / (B * C - A * A) * total + (
-                C * mean.T.dot(cov_inv) - A * ones.T.dot(cov_inv)) / (B * C - A * A) * target
+                C * mean.T.dot(cov_inv) - A * ones.T.dot(cov_inv)) / (B * C - A * A) * round(target, 3)
         m, s = weights.T.dot(mean), math.sqrt(weights.T.dot(cov).dot(weights))
         r = (m - RISK_FREE_RATE * self.period / 252) / s
         return {k: round(v, 3) for k, v in weights.items()}, round(m, 3), round(s, 3), round(r, 3)
@@ -102,23 +103,23 @@ class Quote:
             weights = (B * ones.T.dot(cov_inv) - A * mean.T.dot(cov_inv)) / (B * C - A * A) * total + (
                     C * mean.T.dot(cov_inv) - A * ones.T.dot(cov_inv)) / (B * C - A * A) * guess
             m, s = weights.T.dot(mean), math.sqrt(weights.T.dot(cov).dot(weights))
-            return (s / m) if m > 0 else float('inf')
+            return round(s / m, 3) if m > 0 else float('inf')
 
         data = self.data.pct_change(self.period) * 100
         mean, cov, ones = data.mean(), data.cov(), np.ones(len(data.columns))
         cov_inv = DataFrame(linalg.pinv(cov.values), cov.columns, cov.index)
         A, B, C = ones.T.dot(cov_inv).dot(mean), mean.T.dot(cov_inv).dot(mean), ones.T.dot(cov_inv).dot(ones)
-        res = minimize_scalar(attempt, bounds=(mean.min(), mean.max()))
+        res = minimize_scalar(attempt)
         if not res.success:
             print(res)
         return self.optimize(res.x, total)
 
-    def optimize_portfolio(self, min_percent=.008, backlogs_threshold=.9):
+    def optimize_portfolio(self, min_percent=.008, backlogs_pos_threshold=.9, backlogs_neg_threshold=-.5):
         candidates, backlogs, evicted = set(self.data.columns), [], {}
         corr = self.data.pct_change(self.period).corr()
         while len(candidates) > 1:
             self.setup_mask(candidates)
-            ratio, *_, shrp = self.find_optimal_ratio()
+            ratio, mean, _, shrp = self.find_optimal_ratio()
             min_stock = min(ratio, key=lambda s: ratio[s])
             if ratio[min_stock] >= min_percent:
                 if evicted:
@@ -127,42 +128,47 @@ class Quote:
                             backlogs.append(s)
                             print(f'putting back {s} {evicted[s]}/{shrp}')
                 if backlogs:
-                    nxt = backlogs_threshold + .005
-                    if backlogs_threshold >= .99 and len(backlogs) >= 10:
-                        nxt = backlogs_threshold + .001
-                    print(f'retry backlogs {backlogs} at {nxt} - {shrp}')
+                    nxt1, nxt2 = backlogs_pos_threshold + .005, backlogs_neg_threshold - .01
+                    if backlogs_pos_threshold >= .99 and len(backlogs) >= 10:
+                        nxt1 = backlogs_pos_threshold + .001
+                    print(f'retry backlogs {backlogs} at {nxt1:.3f}/{nxt2:.2f} - {shrp}')
                     self.setup_mask([*backlogs, *candidates])
-                    r, s = self.optimize_portfolio(min_percent, nxt)
-                    if s > shrp:
-                        return r, s
-                return ratio, shrp
+                    sd = self.optimize_portfolio(min_percent, nxt1, nxt2)
+                    sd[(shrp, mean)] = ratio
+                    # while len(sd) > 3:
+                    #     sd.popitem(0)
+                    return sd
+                return SortedDict([((shrp, mean), ratio)])
             candidates.remove(min_stock)
             c1, c2 = corr.loc[min_stock, candidates].max(), corr.loc[min_stock, candidates].min()
-            if c1 >= backlogs_threshold:
+            if c1 >= backlogs_pos_threshold or c2 <= backlogs_neg_threshold:
                 backlogs.append(min_stock)
             else:
-                evicted[min_stock] = self._calculate_sharpe_ratio(min_stock)
+                evicted[min_stock] = self._calculate_sharpe_ratio(min_stock)[1]
                 print(f'evicted {min_stock} {c1:.3f} {c2:.3f}')
-        shrp = self._calculate_sharpe_ratio(next(iter(candidates)))
+        candidate = next(iter(candidates))
+        mean, shrp = self._calculate_sharpe_ratio(candidate)
         if evicted:
             for s in evicted:
                 if evicted[s] >= shrp:
                     backlogs.append(s)
                     print(f'putting back {s} {evicted[s]}/{shrp}')
         if backlogs:
-            nxt = backlogs_threshold + .005
-            if backlogs_threshold >= .99 and len(backlogs) >= 10:
-                nxt = backlogs_threshold + .001
-            print(f'retry backlogs {backlogs} at {nxt} - {shrp}')
-            self.setup_mask([*backlogs, *candidates])
-            r, s = self.optimize_portfolio(min_percent, nxt)
-            if s > shrp:
-                return r, s
-        return {candidates.pop(): 1}, shrp
+            nxt1, nxt2 = backlogs_pos_threshold + .005, backlogs_neg_threshold - .01
+            if backlogs_pos_threshold >= .99 and len(backlogs) >= 10:
+                nxt1 = backlogs_pos_threshold + .001
+            print(f'retry backlogs {backlogs} at {nxt1:.3f}/{nxt2:.2f} - {shrp}')
+            self.setup_mask([*backlogs, candidate])
+            sd = self.optimize_portfolio(min_percent, nxt1, nxt2)
+            sd[(shrp, mean)] = {candidate: 1}
+            # while len(sd) > 3:
+            #     sd.popitem(0)
+            return sd
+        return SortedDict([((shrp, mean), {candidate: 1})])
 
     def _calculate_sharpe_ratio(self, stock):
         data = self.data[stock].pct_change(self.period) * 100
-        return (data.mean() - RISK_FREE_RATE * self.period / 252) / data.std()
+        return round(data.mean(), 3), round((data.mean() - RISK_FREE_RATE * self.period / 252) / data.std(), 3)
 
     def graph(self, portfolio=None, drop_components=False):
         data = {col: self.data[col] * (100 / self.data[col][self.start]) for col in self.data.columns}

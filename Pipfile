@@ -13,6 +13,7 @@ scipy = "*"
 flask-migrate = "*"
 requests = "*"
 python-dotenv = "*"
+sortedcontainers = "*"
 
 [requires]
 python_version = "3.7"
