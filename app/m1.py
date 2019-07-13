@@ -1,5 +1,5 @@
 import os
-from datetime import datetime
+from datetime import datetime, date
 
 import requests
 
@@ -74,6 +74,27 @@ class M1Portfolio(db.Model):
         inst.last_update = datetime.utcnow()
         return inst
 
+    @classmethod
+    def net_value_series(cls, limit=10):
+        source = cls.query.order_by(cls.date.desc())[:limit]
+        s = source[0]
+        series = [(s.date, s.value, s.day_return_rate, s.all_return_rate,
+                   round(s.value * (s.day_return_rate / (100 + s.day_return_rate)), 2))]
+        orig_value, orig_rate = s.value / (1 + s.all_return_rate / 100), s.all_return_rate
+        for i in range(1, len(source)):
+            s, v = source[i], round(series[-1][1] / (1 + source[i - 1].day_return_rate / 100), 2)
+            series.append((s.date, v, s.day_return_rate, s.all_return_rate,
+                           round(v * (s.day_return_rate / (100 + s.day_return_rate)), 2)))
+            if abs(s.all_return_rate) <= abs(orig_rate):
+                orig_value, orig_rate = v / (1 + s.all_return_rate / 100), s.all_return_rate
+        if series[-1][0] == date(2019, 7, 3):
+            v = series[-1][1] / (1 + source[-1].day_return_rate / 100)
+            r = round((v - orig_value) / orig_value * 100, 2)
+            series.append((date(2019, 7, 2), round(v, 2),
+                           r, round(r / (r + .76) * 2.6, 2), round(v - orig_value, 2)))
+            series.append((date(2019, 7, 1), round(orig_value, 2), 0, 0, 0))
+        return list(reversed(series))
+
 
 def graphql(query, headers=None):
     return requests.post('https://lens.m1finance.com/graphql', json={'query': query}, headers=headers).json()
@@ -86,4 +107,7 @@ def parse_datetime(dt):
 def update_m1_account():
     logger = db.get_app().logger
     logger.info('%s', M1Portfolio.create_or_update())
+    logger.info('Latest net values:')
+    for d, v, r1, r2, y in M1Portfolio.net_value_series():
+        logger.info('%s: %s (%+.2f) \t| %+.2f%% / %.2f%%', d, v, y, r1, r2)
     db.session.commit()

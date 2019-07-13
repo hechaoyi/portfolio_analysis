@@ -23,7 +23,7 @@ def init_components(app):
     import requests
     from .instrument import Instrument, update_instruments
     from .account import Portfolio, Position, update_rh_account
-    from .m1 import update_m1_account
+    from .m1 import M1Portfolio, update_m1_account
     from .analysis import Quote
 
     app.robinhood = requests.Session()
@@ -35,6 +35,7 @@ def init_components(app):
         'Portfolio': Portfolio,
         'Position': Position,
         'Quote': Quote,
+        'M1Portfolio': M1Portfolio,
     })
 
     app.cli.command()(
