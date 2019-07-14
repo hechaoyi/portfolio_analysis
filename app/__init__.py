@@ -27,7 +27,7 @@ def init_components(app):
     from .analysis import Quote
 
     app.robinhood = requests.Session()
-    app.robinhood.headers['Authorization'] = os.environ['ROBINHOOD_TOKEN']
+    app.robinhood.headers['Authorization'] = os.environ['ROBINHOOD']
     app.shell_context_processor(lambda: {
         'db': db,
         'rh': app.robinhood,
