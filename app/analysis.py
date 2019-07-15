@@ -9,7 +9,7 @@ from scipy import linalg
 from scipy.optimize import minimize_scalar
 from sortedcontainers import SortedDict
 
-RISK_FREE_RATE = float(os.environ['RISK_FREE_RATE'])
+RISK_FREE_RATE_PER_DAY = float(os.environ['RISK_FREE_RATE']) / 252
 DATA_READER = {
     'yahoo': lambda symbols, start: web.DataReader(symbols, 'yahoo', start)['Adj Close'],
     'tiingo': lambda symbols, start: web.DataReader(symbols, 'tiingo', start)['adjClose'].unstack('symbol'),
@@ -34,17 +34,20 @@ class Quote:
         if self.origin_data is not None:
             self.data, self.origin_data = self.origin_data, None
 
+    def moving_average(self):
+        return self.data.rolling(self.period).mean().pct_change() * 100
+
     def statistics(self):
-        data = self.data.pct_change(periods=self.period) * 100
+        data = self.moving_average()
         frame = {'len': data.count(), 'mean': data.mean(), 'std': data.std(),
-                 'shrp': (data.mean() - RISK_FREE_RATE * self.period / 252) / data.std(),
+                 'shrp': (data.mean() - RISK_FREE_RATE_PER_DAY) / data.std(),
                  'yield': self.data.T[self.data.index[-1]] / self.data.T[self.data.index[0]] * 100 - 100,
                  'drawdown': self.data.apply(self._max_drawdown)}
         return DataFrame(frame).sort_values('shrp', ascending=False)
 
     def update_boosts(self, instruments):
-        r = self.data.pct_change(periods=self.period) * 100
-        boosts = 2 ** ((r.mean() - RISK_FREE_RATE * self.period / 252) / r.std() - .8)
+        r = self.moving_average()
+        boosts = 2 ** ((r.mean() - RISK_FREE_RATE_PER_DAY) / r.std() - .8)
         for sym, inst in instruments.items():
             inst.boost = round(boosts[sym], 4)
             if inst.is_china():
@@ -76,7 +79,7 @@ class Quote:
                 dfs(j + 1, ban)
                 buf.pop()
 
-        stocks, corr, stat = self.data.columns, self.data.pct_change(self.period).corr(), self.statistics()
+        stocks, corr, stat = self.data.columns, self.moving_average().corr(), self.statistics()
         buf = provided if provided else []
         best = [None, float('inf')]
         dfs(0, None)
@@ -88,14 +91,14 @@ class Quote:
         return best[0]
 
     def optimize(self, target, total=1):
-        data = self.data.pct_change(self.period) * 100
+        data = self.moving_average()
         mean, cov, ones = data.mean(), data.cov(), np.ones(len(data.columns))
         cov_inv = DataFrame(linalg.pinv(cov.values), cov.columns, cov.index)
         A, B, C = ones.T.dot(cov_inv).dot(mean), mean.T.dot(cov_inv).dot(mean), ones.T.dot(cov_inv).dot(ones)
         weights = (B * ones.T.dot(cov_inv) - A * mean.T.dot(cov_inv)) / (B * C - A * A) * total + (
                 C * mean.T.dot(cov_inv) - A * ones.T.dot(cov_inv)) / (B * C - A * A) * round(target, 3)
         m, s = weights.T.dot(mean), math.sqrt(weights.T.dot(cov).dot(weights))
-        r = (m - RISK_FREE_RATE * self.period / 252) / s
+        r = (m - RISK_FREE_RATE_PER_DAY) / s
         return {k: round(v, 3) for k, v in weights.items()}, round(m, 3), round(s, 3), round(r, 3)
 
     def find_optimal_ratio(self, _lambda=0, bounds=None, total=1):
@@ -111,7 +114,7 @@ class Quote:
                 return float('inf')
             return s / (m ** (1 + _lambda / 5))
 
-        data = self.data.pct_change(self.period) * 100
+        data = self.moving_average()
         mean, cov, ones = data.mean(), data.cov(), np.ones(len(data.columns))
         if not bounds:
             bounds = mean.min(), mean.max()
@@ -121,7 +124,6 @@ class Quote:
             bounds = bounds[1], bounds[1]
         else:
             bounds = max(mean.min(), bounds[0]), min(mean.max(), bounds[1])
-        bounds = (max(mean.min(), bounds[0]), min(mean.max(), bounds[1])) if bounds else (mean.min(), mean.max())
         cov_inv = DataFrame(linalg.pinv(cov.values), cov.columns, cov.index)
         A, B, C = ones.T.dot(cov_inv).dot(mean), mean.T.dot(cov_inv).dot(mean), ones.T.dot(cov_inv).dot(ones)
         res = minimize_scalar(attempt, bounds=bounds, method='Bounded')
@@ -132,7 +134,7 @@ class Quote:
     def optimize_portfolio(self, min_percent=.1, max_count=3,
                            backlogs_pos_threshold=.9, backlogs_neg_threshold=-.5, _lambda=0, bounds=None):
         candidates, backlogs = set(self.data.columns), []
-        corr = self.data.pct_change(self.period).corr()
+        corr = self.moving_average().corr()
         while len(candidates) > 1:
             self.setup_mask(candidates)
             ratio, mean, _, shrp = self.find_optimal_ratio(_lambda, bounds)
@@ -176,8 +178,8 @@ class Quote:
         return SortedDict([((coef, shrp, mean), {candidate: 1})])
 
     def _calculate_sharpe_ratio(self, stock):
-        data = self.data[stock].pct_change(self.period) * 100
-        return round(data.mean(), 3), round((data.mean() - RISK_FREE_RATE * self.period / 252) / data.std(), 3)
+        data = self.moving_average()[stock]
+        return round(data.mean(), 3), round((data.mean() - RISK_FREE_RATE_PER_DAY) / data.std(), 3)
 
     def graph(self, portfolio=None, drop_components=False):
         data = {col: self.data[col] * (100 / self.data[col][self.start]) for col in self.data.columns}
@@ -189,8 +191,8 @@ class Quote:
                     del data[st]
         data = DataFrame(data)
         data.plot(figsize=(12, 8), grid=1)
-        stat = (data.pct_change(self.period) * 100).describe().T
-        stat['shrp'] = (stat['mean'] - RISK_FREE_RATE * self.period / 252) / stat['std']
+        stat = (data.rolling(self.period).mean().pct_change() * 100).describe().T
+        stat['shrp'] = (stat['mean'] - RISK_FREE_RATE_PER_DAY) / stat['std']
         stat['yield'] = data.T[data.index[-1]] / data.T[data.index[0]] * 100 - 100
         stat['drawdown'] = data.apply(self._max_drawdown)
         return stat.sort_values('shrp', ascending=False)
