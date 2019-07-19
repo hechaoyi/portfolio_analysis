@@ -286,9 +286,9 @@ def update_rh_account():
 
     # Positions
     previous_positions = {pos.symbol: pos for pos in portfolio.previous.positions} if portfolio.previous else {}
-    quantity = rh.get('https://nummus.robinhood.com/holdings/').json()['results'][0]['quantity']
-    instrument, previous = Instrument.query.get('BTC'), previous_positions.pop('BTC', None)
-    logger.info('%s', Position.create_or_update(instrument, previous, portfolio, quantity))
+    # quantity = rh.get('https://nummus.robinhood.com/holdings/').json()['results'][0]['quantity']
+    # instrument, previous = Instrument.query.get('BTC'), previous_positions.pop('BTC', None)
+    # logger.info('%s', Position.create_or_update(instrument, previous, portfolio, quantity))
     for pos in rh.get('https://api.robinhood.com/positions/?nonzero=true').json()['results']:
         if float(pos['quantity']) > 0:
             s = pos['instrument'][len('https://api.robinhood.com/instruments/'):-1]

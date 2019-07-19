@@ -35,7 +35,7 @@ class Quote:
             self.data, self.origin_data = self.origin_data, None
 
     def moving_average(self):
-        return self.data.rolling(self.period).mean().pct_change() * 100
+        return self.data.rolling(self.period, self.period - 1).mean().pct_change() * 100
 
     def statistics(self):
         data = self.moving_average()
@@ -191,7 +191,7 @@ class Quote:
                     del data[st]
         data = DataFrame(data)
         data.plot(figsize=(12, 8), grid=1)
-        stat = (data.rolling(self.period).mean().pct_change() * 100).describe().T
+        stat = (data.rolling(self.period, self.period - 1).mean().pct_change() * 100).describe().T
         stat['shrp'] = (stat['mean'] - RISK_FREE_RATE_PER_DAY) / stat['std']
         stat['yield'] = data.T[data.index[-1]] / data.T[data.index[0]] * 100 - 100
         stat['drawdown'] = data.apply(self._max_drawdown)

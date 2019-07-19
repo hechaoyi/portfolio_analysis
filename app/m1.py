@@ -80,13 +80,11 @@ class M1Portfolio(db.Model):
         s = source[0]
         series = [(s.date, s.value, s.day_return_rate, s.all_return_rate,
                    round(s.value * (s.day_return_rate / (100 + s.day_return_rate)), 2))]
-        orig_value, orig_rate = s.value / (1 + s.all_return_rate / 100), s.all_return_rate
+        orig_value = s.all_net_cash_flow
         for i in range(1, len(source)):
             s, v = source[i], round(series[-1][1] / (1 + source[i - 1].day_return_rate / 100), 2)
             series.append((s.date, v, s.day_return_rate, s.all_return_rate,
                            round(v * (s.day_return_rate / (100 + s.day_return_rate)), 2)))
-            if abs(s.all_return_rate) <= abs(orig_rate):
-                orig_value, orig_rate = v / (1 + s.all_return_rate / 100), s.all_return_rate
         if series[-1][0] == date(2019, 7, 3):
             v = series[-1][1] / (1 + source[-1].day_return_rate / 100)
             r = round((v - orig_value) / orig_value * 100, 2)
