@@ -27,7 +27,11 @@ def init_components(app):
     from .analysis import Quote
 
     app.robinhood = requests.Session()
-    app.robinhood.headers['Authorization'] = os.environ['ROBINHOOD']
+    json = requests.post('https://api.robinhood.com/oauth2/token/',
+                         json={'username': os.environ['RH_USERNAME'], 'password': os.environ['RH_PASSWORD'],
+                               'client_id': os.environ['RH_CLIENT_ID'], 'device_token': os.environ['RH_DEVICE_TOKEN'],
+                               'expires_in': 86400, 'scope': 'internal', 'grant_type': 'password'}).json()
+    app.robinhood.headers['Authorization'] = f"{json['token_type']} {json['access_token']}"
     app.shell_context_processor(lambda: {
         'db': db,
         'rh': app.robinhood,

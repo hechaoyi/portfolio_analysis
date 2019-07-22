@@ -17,8 +17,8 @@ DATA_READER = {
 
 
 class Quote:
-    def __init__(self, symbols, days_ago, period):
-        start = date.today() - timedelta(days=days_ago)
+    def __init__(self, symbols, data_points, period):
+        start = DATA_READER('SPY', date.today() - timedelta(days=data_points * 1.5)).index[-data_points]
         self.data = DATA_READER(symbols, start)
         self.period = period
         self.start = self.data.index[0]
@@ -132,14 +132,15 @@ class Quote:
         return self.optimize(res.x, total)
 
     def optimize_portfolio(self, min_percent=.1, max_count=3,
-                           backlogs_pos_threshold=.9, backlogs_neg_threshold=-.5, _lambda=0, bounds=None):
+                           backlogs_pos_threshold=.9, backlogs_neg_threshold=-.5, _lambda=0, bounds=None,
+                           must_have=frozenset()):
         candidates, backlogs = set(self.data.columns), []
         corr = self.moving_average().corr()
         while len(candidates) > 1:
             self.setup_mask(candidates)
             ratio, mean, _, shrp = self.find_optimal_ratio(_lambda, bounds)
             coef = round(shrp * (mean ** (_lambda / 5)), 4)
-            min_stock = min(ratio, key=lambda s: ratio[s])
+            min_stock = min(ratio, key=lambda s: ratio[s] if s not in must_have else float('inf'))
             if ratio[min_stock] >= min_percent and len(ratio) <= max_count:
                 if backlogs:
                     nxt1, nxt2 = backlogs_pos_threshold + .005, backlogs_neg_threshold - .01
