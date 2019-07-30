@@ -318,6 +318,6 @@ def update_rh_account():
     if positions:
         for pos in positions.values():
             if pos.symbol != 'BTC' and pos.quantity > 0:
-                logger.info('Recommendation: %s %d (%f)', pos.symbol, -pos.quantity, -pos.equity)
+                logger.info('Recommendation: %s %d (%.2f)', pos.symbol, -pos.quantity, -pos.equity)
 
     db.session.commit()

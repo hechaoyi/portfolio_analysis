@@ -4,6 +4,7 @@ from datetime import date, timedelta, datetime
 
 import numpy as np
 import pandas_datareader.data as web
+import requests
 from pandas import DataFrame
 from scipy import linalg
 from scipy.optimize import minimize_scalar
@@ -213,3 +214,37 @@ class Quote:
     @staticmethod
     def usd_cny():
         print(web.DataReader('USD/CNY', 'av-forex')['USD/CNY']['Exchange Rate'])
+
+    @staticmethod
+    def screen_funds(*filters, min_assets=.8, max_expense=.4):
+        query = 'query screen($filter:[String!]!,$limit:[FundLimitOptionInput!]!)' \
+                '{viewer{screenFunds(filterCategory:$filter,limit:$limit,' \
+                'sort:{type:FUND_TOTAL_ASSETS,direction:DESC},first:100){edges{node{symbol}}}}}'
+        variables = {'filter': filters,
+                     'limit': [{'type': 'FUND_TOTAL_ASSETS', 'min': min_assets * 1000000000, 'inclusive': True},
+                               {'type': 'FUND_NET_EXPENSE_RATIO', 'max': max_expense, 'inclusive': True}]}
+        r = requests.post('https://lens.m1finance.com/graphql', json={'query': query, 'variables': variables}).json()
+        return [n['node']['symbol'] for n in r['data']['viewer']['screenFunds']['edges']]
+
+    @staticmethod
+    def screen_securities(min_assets=100):
+        def screen(after=None):
+            variables = {'limit': [{'type': 'MARKET_CAP', 'min': min_assets * 1000000000, 'inclusive': True}],
+                         'after': after}
+            r = requests.post('https://lens.m1finance.com/graphql',
+                              json={'query': query, 'variables': variables}).json()
+            cursor = None
+            if r['data']['viewer']['screenSecurities']['pageInfo']['hasNextPage']:
+                cursor = r['data']['viewer']['screenSecurities']['pageInfo']['endCursor']
+            return [n['node']['symbol'].replace('.', '-')
+                    for n in r['data']['viewer']['screenSecurities']['edges']], cursor
+
+        query = 'query screen($limit:[SecurityLimitOptionInput!]!,$after:String)' \
+                '{viewer{screenSecurities(filterTypes:EQUITY,limit:$limit,' \
+                'sort:{type:MARKET_CAP,direction:DESC},first:100,after:$after)' \
+                '{pageInfo{hasNextPage,endCursor},edges{node{symbol}}}}}'
+        s, after = screen()
+        while after:
+            ss, after = screen(after)
+            s += ss
+        return s

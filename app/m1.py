@@ -42,12 +42,10 @@ class M1Portfolio(db.Model):
                       f'{{ startValue {{ date, value }}, endValue {{ date, value }}, '
                       f'moneyWeightedRateOfReturn, totalGain, capitalGain, earnedDividends, netCashFlow '
                       f'}}}}}}}}', {'Authorization': f'Bearer {token}'})['data']['node']['performance']
-        if day['endValue']['date'][-13:] == '00:00:00.000Z':
-            return None
-        _date = parse_datetime(day['endValue']['date']).date()
-        inst = cls.query.filter_by(date=_date).first()
+        start_time = parse_datetime(day['startValue']['date'])
+        inst = cls.query.filter_by(day_start_time=start_time).first()
         if not inst:
-            inst = cls(date=_date)
+            inst = cls(date=date.today(), day_start_time=start_time)
             db.session.add(inst)
         inst.value = day['endValue']['value']
 
@@ -56,7 +54,7 @@ class M1Portfolio(db.Model):
         inst.day_dividend_gain = day['earnedDividends']
         inst.day_total_gain = day['totalGain']
         inst.day_return_rate = day['moneyWeightedRateOfReturn']
-        inst.day_start_time = parse_datetime(day['startValue']['date'])
+        # inst.day_start_time = parse_datetime(day['startValue']['date'])
         inst.day_start_value = day['startValue']['value']
 
         all = graphql(f'{{ node(id: "{M1_ACCT_ID}") {{ ... on PortfolioSlice {{ performance(period: MAX) '
@@ -76,21 +74,15 @@ class M1Portfolio(db.Model):
 
     @classmethod
     def net_value_series(cls, limit=10):
+        #source = cls.query.filter(cls.date >= date(2019, 7, 18)).order_by(cls.date.desc())[:limit]
         source = cls.query.order_by(cls.date.desc())[:limit]
         s = source[0]
         series = [(s.date, s.value, s.day_return_rate, s.all_return_rate,
                    round(s.value * (s.day_return_rate / (100 + s.day_return_rate)), 2))]
-        orig_value = s.all_net_cash_flow
         for i in range(1, len(source)):
             s, v = source[i], round(series[-1][1] / (1 + source[i - 1].day_return_rate / 100), 2)
             series.append((s.date, v, s.day_return_rate, s.all_return_rate,
                            round(v * (s.day_return_rate / (100 + s.day_return_rate)), 2)))
-        if series[-1][0] == date(2019, 7, 3):
-            v = series[-1][1] / (1 + source[-1].day_return_rate / 100)
-            r = round((v - orig_value) / orig_value * 100, 2)
-            series.append((date(2019, 7, 2), round(v, 2),
-                           r, round(r / (r + .76) * 2.6, 2), round(v - orig_value, 2)))
-            series.append((date(2019, 7, 1), round(orig_value, 2), 0, 0, 0))
         return list(reversed(series))
 
 

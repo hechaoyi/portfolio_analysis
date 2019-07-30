@@ -153,15 +153,17 @@ def update_instruments(popularity_cutoff=300):
     rh, logger = db.get_app().robinhood, db.get_app().logger
     Instrument.create_or_update_btc()
     queue, seen, count = collections.deque(), set(), 0
-    for url in (
-            'https://api.robinhood.com/midlands/tags/tag/100-most-popular/',
-            'https://api.robinhood.com/midlands/tags/tag/etf/',
-            'https://api.robinhood.com/midlands/tags/tag/reit/',
-            'https://api.robinhood.com/midlands/tags/tag/china/',
-            'https://api.robinhood.com/midlands/tags/tag/3xetf/',):
-        queue.extend(url[len('https://api.robinhood.com/instruments/'):-1]
-                     for url in rh.get(url).json()['instruments'][:100])
+    # for url in (
+    #         'https://api.robinhood.com/midlands/tags/tag/100-most-popular/',
+    #         'https://api.robinhood.com/midlands/tags/tag/etf/',
+    #         'https://api.robinhood.com/midlands/tags/tag/reit/',
+    #         'https://api.robinhood.com/midlands/tags/tag/china/',
+    #         'https://api.robinhood.com/midlands/tags/tag/3xetf/',):
+    #     queue.extend(url[len('https://api.robinhood.com/instruments/'):-1]
+    #                  for url in rh.get(url).json()['instruments'][:100])
     queue.append('5d0ab83c-ed6b-48be-a7bf-9c707498fb7d')  # EDV
+    queue.append('3cab9f3f-a8f3-498d-801c-4222a257812b')  # TLH
+    queue.append('919b4755-b122-41cc-8976-aa3ba55af8e7')  # SPTL
     while queue:
         chunk = []
         while queue and len(chunk) < 50:
