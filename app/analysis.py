@@ -132,7 +132,7 @@ class Quote:
             print(res)
         return self.optimize(res.x, total)
 
-    def optimize_portfolio(self, min_percent=.1, max_count=3,
+    def optimize_portfolio(self, min_percent=.2, max_count=5,
                            backlogs_pos_threshold=.9, backlogs_neg_threshold=-.5, _lambda=0, bounds=None,
                            must_have=frozenset()):
         candidates, backlogs = set(self.data.columns), []
@@ -227,9 +227,10 @@ class Quote:
         return [n['node']['symbol'] for n in r['data']['viewer']['screenFunds']['edges']]
 
     @staticmethod
-    def screen_securities(min_assets=100):
+    def screen_securities(min_assets=100, min_ratio=None, max_ratio=100):
         def screen(after=None):
-            variables = {'limit': [{'type': 'MARKET_CAP', 'min': min_assets * 1000000000, 'inclusive': True}],
+            variables = {'limit': [{'type': 'MARKET_CAP', 'min': min_assets * 1000000000, 'inclusive': True},
+                                   {'type': 'PE_RATIO', 'min': min_ratio, 'max': max_ratio, 'inclusive': True}],
                          'after': after}
             r = requests.post('https://lens.m1finance.com/graphql',
                               json={'query': query, 'variables': variables}).json()

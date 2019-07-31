@@ -302,7 +302,7 @@ def update_rh_account():
 
     # ETF
     # logger.info('3x ETF: %s', portfolio.calculate_etf('TMF', 'SPXL'))
-    logger.info('1x ETF: %s', portfolio.calculate_etf('EDV', 'MTUM'))
+    logger.info('1x ETF: %s', portfolio.calculate_etf('TLH', 'MTUM'))
 
     # Recommendations
     positions = {pos.symbol: pos for pos in portfolio.positions}
