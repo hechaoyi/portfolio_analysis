@@ -74,7 +74,7 @@ class M1Portfolio(db.Model):
 
     @classmethod
     def net_value_series(cls, limit=10):
-        #source = cls.query.filter(cls.date >= date(2019, 7, 18)).order_by(cls.date.desc())[:limit]
+        # source = cls.query.filter(cls.date >= date(2019, 7, 18)).order_by(cls.date.desc())[:limit]
         source = cls.query.order_by(cls.date.desc())[:limit]
         s = source[0]
         series = [(s.date, s.value, s.day_return_rate, s.all_return_rate,
@@ -98,6 +98,6 @@ def update_m1_account():
     logger = db.get_app().logger
     logger.info('%s', M1Portfolio.create_or_update())
     logger.info('Latest net values:')
-    for d, v, r1, r2, y in M1Portfolio.net_value_series():
+    for d, v, r1, r2, y in M1Portfolio.net_value_series(20):
         logger.info('%s: %s (%+.2f) \t| %+.2f%% / %.2f%%', d, v, y, r1, r2)
     db.session.commit()

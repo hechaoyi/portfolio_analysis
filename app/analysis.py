@@ -192,7 +192,7 @@ class Quote:
                 for st in portfolio:
                     del data[st]
         data = DataFrame(data)
-        data.plot(figsize=(12, 8), grid=1)
+        data.plot(figsize=(12, 4), grid=1)
         stat = (data.rolling(self.period, self.period - 1).mean().pct_change() * 100).describe().T
         stat['shrp'] = (stat['mean'] - RISK_FREE_RATE_PER_DAY) / stat['std']
         stat['yield'] = data.T[data.index[-1]] / data.T[data.index[0]] * 100 - 100
