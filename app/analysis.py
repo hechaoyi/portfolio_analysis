@@ -40,7 +40,7 @@ class Quote:
 
     def statistics(self):
         data = self.moving_average()
-        frame = {'len': data.count(), 'mean': data.mean(), 'std': data.std(),
+        frame = {'len': data.count(), 'mean': data.mean(), 'std': data.std(), 'skew': data.skew(),
                  'shrp': (data.mean() - RISK_FREE_RATE_PER_DAY) / data.std(),
                  'yield': self.data.T[self.data.index[-1]] / self.data.T[self.data.index[0]] * 100 - 100,
                  'drawdown': self.data.apply(self._max_drawdown)}
@@ -192,11 +192,13 @@ class Quote:
                 for st in portfolio:
                     del data[st]
         data = DataFrame(data)
-        data.plot(figsize=(12, 4), grid=1)
-        stat = (data.rolling(self.period, self.period - 1).mean().pct_change() * 100).describe().T
+        data.plot(figsize=(15, 5), grid=1)
+        dd = data.rolling(self.period, self.period - 1).mean().pct_change() * 100
+        stat = dd.describe().T
         stat['shrp'] = (stat['mean'] - RISK_FREE_RATE_PER_DAY) / stat['std']
         stat['yield'] = data.T[data.index[-1]] / data.T[data.index[0]] * 100 - 100
         stat['drawdown'] = data.apply(self._max_drawdown)
+        stat['skewness'] = dd.skew()
         return stat.sort_values('shrp', ascending=False)
 
     @staticmethod
