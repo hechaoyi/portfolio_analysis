@@ -19,12 +19,12 @@ def create_app():
 
 def init_components(app):
     import logging
-    import click
-    import requests
-    from .instrument import Instrument, update_instruments
-    from .account import Portfolio, Position, update_rh_account
-    from .m1 import M1Portfolio, update_m1_account
-    from .analysis import Quote
+    # import click
+    # import requests
+    # from .instrument import Instrument, update_instruments
+    # from .account import Portfolio, Position, update_rh_account
+    # from .m1 import M1Portfolio, update_m1_account
+    # from .analysis import Quote
 
     # app.robinhood = requests.Session()
     # json = requests.post('https://api.robinhood.com/oauth2/token/',
@@ -35,19 +35,19 @@ def init_components(app):
     app.shell_context_processor(lambda: {
         'db': db,
         # 'rh': app.robinhood,
-        'Instrument': Instrument,
-        'Portfolio': Portfolio,
-        'Position': Position,
-        'Quote': Quote,
-        'M1Portfolio': M1Portfolio,
+        # 'Instrument': Instrument,
+        # 'Portfolio': Portfolio,
+        # 'Position': Position,
+        # 'Quote': Quote,
+        # 'M1Portfolio': M1Portfolio,
     })
 
-    app.cli.command()(
-        click.option('--popularity_cutoff', default=300)(
-            update_instruments))
+    # app.cli.command()(
+    #     click.option('--popularity_cutoff', default=300)(
+    #         update_instruments))
     # app.cli.command()(update_rh_account)
-    app.cli.command()(update_m1_account)
-    app.cli.command()(Quote.usd_cny)
+    # app.cli.command()(update_m1_account)
+    # app.cli.command()(Quote.usd_cny)
     app.logger.setLevel(logging.INFO)
 
 
