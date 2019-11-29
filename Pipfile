@@ -16,8 +16,6 @@ graphene = "*"
 requests = "*"
 python-dotenv = "*"
 sortedcontainers = "*"
-redis = "*"
-rq = "*"
 psycopg2-binary = "*"
 
 [requires]
