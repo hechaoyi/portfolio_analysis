@@ -7,16 +7,15 @@ verify_ssl = true
 
 [packages]
 jupyterlab = "*"
-matplotlib = "*"
 pandas-datareader = "*"
 scipy = "*"
+matplotlib = "*"
 flask-migrate = "*"
 flask_graphql = "*"
 graphene = "*"
-requests = "*"
-python-dotenv = "*"
-sortedcontainers = "*"
 psycopg2-binary = "*"
+redis = "*"
+rq = "*"
 
 [requires]
 python_version = "3.7"
